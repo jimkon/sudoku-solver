@@ -2,15 +2,30 @@ import numpy as np
 import cv2
 import time
 
+
 # RESOLUTION = (240, 320)
 RESOLUTION = (480, 640)
 # RESOLUTION = (720, 1280)
 
 
+def rho_theta_to_coords(line, image_shape=None):
+    rho, theta = line
+    a = np.cos(theta)
+    b = np.sin(theta)
+    x0 = a*rho
+    y0 = b*rho
+    x1 = int(x0 + 1000*(-b))
+    y1 = int(y0 + 1000*(a))
+    x2 = int(x0 - 1000*(-b))
+    y2 = int(y0 - 1000*(a))
+    return x1, y1, x2, y2
+
+
 def run():
     cap = cv2.VideoCapture(0)
-    ret = cap.set(3, RESOLUTION[1])
-    ret = cap.set(4, RESOLUTION[0])
+    ret = cap.set(cv2.CAP_PROP_FRAME_WIDTH, RESOLUTION[1])
+    ret = cap.set(cv2.CAP_PROP_FRAME_HEIGHT, RESOLUTION[0])
+    cap.set(cv2.CAP_PROP_FPS, 60)
     last_t = time.time()
     frames = 0
     fps = 0
@@ -69,13 +84,14 @@ def filter_image(img, check_size=False):
 
     blur2 = cv2.medianBlur(th, 7)
 
-    kernel = np.ones((5, 5), np.uint8)
-    opening = cv2.morphologyEx(blur2, cv2.MORPH_CLOSE, kernel)
-
-    kernel = np.ones((7, 7), np.uint8)
-    dilation = cv2.dilate(opening, kernel, iterations=1)
-
-    res = dilation
+    # # kernel = np.ones((5, 5), np.uint8)
+    # # opening = cv2.morphologyEx(blur2, cv2.MORPH_CLOSE, kernel)
+    # #
+    # # kernel = np.ones((7, 7), np.uint8)
+    # # dilation = cv2.dilate(opening, kernel, iterations=1)
+    #
+    # res = dilation
+    res = blur2
 
     return res
 
