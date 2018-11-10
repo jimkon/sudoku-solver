@@ -124,13 +124,19 @@ def rho_theta_to_coords(line, image_shape=None):
 
 def nearest_neighbors(arr, values):
     res = []
-
+#     vs = list(np.sort(values))
     vs = values
     thresholds = list((vs[i+1]+vs[i])/2 for i in range(len(vs)-1))
+#     thresholds.insert(0, np.min(arr)*(1+np.finfo(type(arr[0])).eps))
     thresholds.insert(0, np.min(arr)-0.01)
-    thresholds.append(np.max(arr))
 
+#     print(np.finfo(type(arr[0])).epsneg, np.min(arr),
+#           np.min(arr)*(1+np.finfo(type(arr[0])).eps),
+#           np.min(arr)<np.min(arr)*(1+np.finfo(type(arr[0])).eps))
+    thresholds.append(np.max(arr))
+#     print(thresholds)
     for th_i in range(1, len(thresholds)):
+        #         print(thresholds[th_i-1], thresholds[th_i])
         indexes_1 = np.where(arr <= thresholds[th_i])[0]
         indexes_2 = np.where(arr > thresholds[th_i-1])[0]
         indexes = list(set(indexes_1).intersection(indexes_2))
@@ -140,10 +146,13 @@ def nearest_neighbors(arr, values):
 
 def classify_lines_by_theta(ls):
     thetas = np.array(list(line[0][1] for line in ls))
-
+#     print(len(thetas))
+#     plt.hist(thetas)
     count, ths = np.histogram(thetas)
-
+#     print(count)
+#     print( np.argsort(count))
     th1, th2 = ths[((np.argsort(count))[::-1])[:2]]
+#     print(th1, th2)
 
     thetas_1, thetas_2 = nearest_neighbors(thetas, [th1, th2])
 
@@ -156,20 +165,27 @@ def filter_lines_by_rho(ls, threshold=25):
     sorted_indexes = np.argsort(rhos)
     rhos = rhos[sorted_indexes]
     sorted_lines = ls[sorted_indexes]
-
+#     print(len(rhos), rhos)
     ct = np.array(list(np.array([abs(rhos[i]-rhos[j])
                                  for i in range(len(rhos)-1, j, -1)]) for j in range(len(rhos)-1)))
+#     for i, _ in enumerate(ct):
+#         print(i, _)
     res = []
     for i, l in enumerate(ct):
         if np.min(l) > threshold:
             res.append(i)
-
+#         else:
+#             print("delele", i)
     res.append(len(rhos)-1)
-
+#     print("res", res)
+#     print("rhos\n",rhos, "\n")
     classified_lines = nearest_neighbors(rhos, rhos[res])
-
+#     print("classified_lines\n", classified_lines)
+#     for _ in list(sorted_lines[inds] for inds in classified_lines):
+#         print(_, "end")
     final_lines = list(np.average(sorted_lines[inds], axis=0) for inds in classified_lines)
-
+#     print("test")
+#     print(final_lines)
     return final_lines
 
 
