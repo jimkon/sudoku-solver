@@ -85,14 +85,19 @@ def run():
     print("digits", digits.shape)
     table = recognize_digits(digits)
     print("sudoku\n", table)
-    table_image = table_to_image(table)
-    print("table_image", table_image.shape)
-    temp = gray_to_rgb(sudoku_image, mask=[0.2, 0.2, 0.2]) + table_image
+    temp = gray_to_rgb(sudoku_image, mask=[0.2, 0.2, 0.2]) + table_to_image(table)
     cv2.imshow("digits", temp)
     # temp = (temp for digit in digits)
     # cv2.imshow("cropped and resized", sudoku_image)
     c = cv2.waitKey(0)
 
+    solved = solve(table)
+
+    new_numbers = solved-table
+    temp = gray_to_rgb(sudoku_image, mask=[0.2, 0.2, 0.2]) + \
+        table_to_image(new_numbers, color_mask=[0.8, 0, 0])+table_to_image(table)
+    cv2.imshow("digits", temp)
+    c = cv2.waitKey(0)
     cv2.destroyAllWindows()
 
 
@@ -151,7 +156,8 @@ def crop_digits(img):
     #     cv2.circle(img, tuple(p1),  3, (0, 255, 0), -1)
     #     cv2.circle(img, tuple(p2),  3, (0, 255, 255), -1)
 
-    res = np.array(list(img[p[1]:p[1]+DIGIT_RESOLUTION[1], p[0]                            :p[0]+DIGIT_RESOLUTION[0]] for p in points))
+    res = np.array(list(img[p[1]:p[1]+DIGIT_RESOLUTION[1], p[0]
+                   :p[0]+DIGIT_RESOLUTION[0]] for p in points))
     res = np.reshape(res, (9, 9, DIGIT_RESOLUTION[0], DIGIT_RESOLUTION[1]))
     # for i, _ in enumerate(res):
     #     cv2.putText(_, "{}".format(i), (20, 20),
@@ -160,10 +166,31 @@ def crop_digits(img):
 
 
 def recognize_digits(digits):
-    return np.random.randint(10, size=(9, 9))
+    # example sudoku
+    return string_to_table("030467050920010006067300148301006027400850600090200400005624001203000504040030702")
+    # return np.random.randint(10, size=(9, 9))
 
 
+def solve(table):
+    # https://github.com/hbldh/dlxsudoku
+    from dlxsudoku import Sudoku
+
+    s = table_to_string(table)
+    sudoku = Sudoku(s)
+    sudoku.solve()
+    return string_to_table(sudoku.to_oneliner())
 ############################################
+
+
+def table_to_string(table):
+    res = "".join(str(n) for n in np.array(table).flatten())
+    return res
+
+
+def string_to_table(s):
+    res = np.array(list(np.array(list(int(d) for d in s[i:i+9])) for i in np.arange(9)*9))
+    return res
+
 
 def table_to_image(table, color_mask=[0, 0, 0.8]):
     temp = np.zeros((9, 9, DIGIT_RESOLUTION[0], DIGIT_RESOLUTION[1]))
