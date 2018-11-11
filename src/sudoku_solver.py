@@ -77,13 +77,17 @@ def run():
 
     sudoku_image = cv2.resize(crop_image(gray, points), (9*DIGIT_RESOLUTION[0], 9*DIGIT_RESOLUTION[1]),
                               interpolation=cv2.INTER_CUBIC)  # INTER_AREA  for shrinking
-    print("cropped and resized", sudoku_image.shape)
-    cv2.imshow("cropped and resized", gray_to_rgb(sudoku_image))
-    c = cv2.waitKey(0)
+    # print("cropped and resized", sudoku_image.shape)
+    # cv2.imshow("cropped and resized", gray_to_rgb(sudoku_image))
+    # c = cv2.waitKey(0)
 
     digits = crop_digits(sudoku_image)
     print("digits", digits.shape)
-    temp = np.hstack(np.vstack(digits[np.arange(9)+offset*9]) for offset in np.arange(9))
+    table = recognize_digits(digits)
+    print("sudoku\n", table)
+    table_image = table_to_image(table)
+    print("table_image", table_image.shape)
+    temp = gray_to_rgb(sudoku_image, mask=[0.2, 0.2, 0.2]) + table_image
     cv2.imshow("digits", temp)
     # temp = (temp for digit in digits)
     # cv2.imshow("cropped and resized", sudoku_image)
@@ -147,13 +151,40 @@ def crop_digits(img):
     #     cv2.circle(img, tuple(p1),  3, (0, 255, 0), -1)
     #     cv2.circle(img, tuple(p2),  3, (0, 255, 255), -1)
 
-    res = np.array(list(img[p[1]:p[1]+DIGIT_RESOLUTION[1], p[0]:p[0]+DIGIT_RESOLUTION[0]] for p in points))
+    res = np.array(list(img[p[1]:p[1]+DIGIT_RESOLUTION[1], p[0]                            :p[0]+DIGIT_RESOLUTION[0]] for p in points))
+    res = np.reshape(res, (9, 9, DIGIT_RESOLUTION[0], DIGIT_RESOLUTION[1]))
     # for i, _ in enumerate(res):
     #     cv2.putText(_, "{}".format(i), (20, 20),
     #                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0))
     return res
 
+
+def recognize_digits(digits):
+    return np.random.randint(10, size=(9, 9))
+
+
 ############################################
+
+def table_to_image(table, color_mask=[0, 0, 0.8]):
+    temp = np.zeros((9, 9, DIGIT_RESOLUTION[0], DIGIT_RESOLUTION[1]))
+    for i, row in enumerate(table):
+        for j, n in enumerate(row):
+            if n == 0:
+                continue
+            cv2.putText(temp[j][i], "{}".format(n),
+                        (int(DIGIT_RESOLUTION[0]*0.4), int(DIGIT_RESOLUTION[0]*0.4)),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5,
+                        (255, 0, 0))
+    res = None
+    for row in temp:
+        t_res = np.vstack(row)
+        if res is None:
+            res = t_res
+        else:
+            res = np.hstack([res, t_res])
+
+    return gray_to_rgb(res, mask=color_mask)
 
 
 def line_intersect(A1, A2, B1, B2):
