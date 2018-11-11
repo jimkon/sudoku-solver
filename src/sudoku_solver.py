@@ -8,6 +8,8 @@ import time
 RESOLUTION = (720, 1280)
 DIGIT_RESOLUTION = (40, 40)
 
+TITLE = "Press q to quit and a when sudoku is detected"
+
 
 def run():
     cap = cv2.VideoCapture(0)
@@ -57,7 +59,7 @@ def run():
         cv2.putText(display_image, "fps:{}".format(fps), (20, 20),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0))
         # display_image = np.hstack((gray, filtered_image))
-        cv2.imshow('frame shape:{}'.format(gray.shape), display_image)
+        cv2.imshow('{} frame shape:{}'.format(TITLE, gray.shape), display_image)
 
         c = cv2.waitKey(1) & 0xFF
         if c == ord('q'):
