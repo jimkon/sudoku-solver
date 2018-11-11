@@ -6,6 +6,7 @@ import time
 # RESOLUTION = (240, 320)
 # RESOLUTION = (480, 640)
 RESOLUTION = (720, 1280)
+DIGIT_RESOLUTION = (40, 40)
 
 
 def run():
@@ -17,7 +18,7 @@ def run():
     frames = 0
     fps = 0
 
-    sudoku_loc = None
+    points = None
 
     while(True):
         # Capture frame-by-frame
@@ -37,29 +38,57 @@ def run():
 
         # Display the resulting frame
         filtered_image = filter_image(gray)  # display processed image
-        l1, l2 = detection(filtered_image)
-        filtered_image = binary_to_rgb(filtered_image)
-        for line in l1:
-            line = line[0]
-            x1, y1, x2, y2 = rho_theta_to_coords(line)
-            cv2.line(filtered_image, (x1, y1), (x2, y2), (0, 255, 0), 1)
-        for line in l2:
-            line = line[0]
-            x1, y1, x2, y2 = rho_theta_to_coords(line)
-            cv2.line(filtered_image, (x1, y1), (x2, y2), (0, 255, 0), 1)
-        # Display the fps
 
-        display_image = filtered_image
+        # display_image = gray_to_rgb(filtered_image)
+        display_image = gray
+
+        points = detect(filtered_image)
+        for i, p in enumerate(points):
+            c_p = [(255, 0, 0),
+                   (255, 0, 255),
+                   (0, 0, 255),
+                   (0, 0, 255)]
+            c = c_p[i]
+            cv2.circle(display_image, tuple(p),  3, c, -1)
+            prev_p = points[i-1 if i > 0 else len(c_p)-1]
+            cv2.line(display_image, tuple(p), tuple(prev_p), (255, 0, 0), 1)
+
+        # Display the fps
         cv2.putText(display_image, "fps:{}".format(fps), (20, 20),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0))
         # display_image = np.hstack((gray, filtered_image))
         cv2.imshow('frame shape:{}'.format(gray.shape), display_image)
-        # sudoku_loc = detect_sudoku(gray)
-        if cv2.waitKey(1) & 0xFF == ord('q') or sudoku_loc is not None:
+
+        c = cv2.waitKey(1) & 0xFF
+        if c == ord('q'):
+            cap.release()
+            cv2.destroyAllWindows()
+            return
+        if c == ord('a') and points is not None:
             break
 
     # When everything done, release the capture
     cap.release()
+    cv2.destroyAllWindows()
+
+    print(points)
+
+    sudoku_image = crop_image(gray, points)
+
+    sudoku_image = cv2.resize(crop_image(gray, points), (9*DIGIT_RESOLUTION[0], 9*DIGIT_RESOLUTION[1]),
+                              interpolation=cv2.INTER_CUBIC)  # INTER_AREA  for shrinking
+    print(sudoku_image.shape)
+    # cv2.imshow("cropped and resized", sudoku_image)
+    # c = cv2.waitKey(0)
+
+    digits = crop_digits(sudoku_image)
+    print(sudoku_image.shape)
+    temp = np.hstack(np.vstack(digits[np.arange(9)+offset*9]) for offset in np.arange(9))
+    cv2.imshow("digits", temp)
+    # temp = (temp for digit in digits)
+    # cv2.imshow("cropped and resized", sudoku_image)
+    c = cv2.waitKey(0)
+
     cv2.destroyAllWindows()
 
 
@@ -86,6 +115,52 @@ def filter_image(img, check_size=False):
     res = blur2
 
     return res
+
+
+def detect(filtered_img):
+
+    length = int(0.8*RESOLUTION[0])
+
+    x = int((RESOLUTION[1]-length)/2)
+    y = int((RESOLUTION[0]-length)/2)
+    w = length
+    h = length
+
+    return [x, y], [x+w, y], [x+w, y+h], [x, y+h]
+
+
+def crop_image(img, points):
+    x1 = points[0][0]
+    x2 = points[1][0]
+    y1 = points[0][1]
+    y2 = points[2][1]
+    return img[y1:y2, x1:x2]
+
+
+def crop_digits(img):
+    from itertools import product
+
+    # img = gray_to_rgb(img)
+
+    res = []
+
+    x = np.arange(9)
+    y = np.arange(9)
+    # print(x, y)
+    points = np.multiply(np.array(list(product(x, y))), DIGIT_RESOLUTION)
+    # print(points)
+    # for p1 in points:
+    #     p2 = p1+DIGIT_RESOLUTION
+    #     cv2.circle(img, tuple(p1),  3, (0, 255, 0), -1)
+    #     cv2.circle(img, tuple(p2),  3, (0, 255, 255), -1)
+
+    res = np.array(list(img[p[1]:p[1]+DIGIT_RESOLUTION[1], p[0]:p[0]+DIGIT_RESOLUTION[0]] for p in points))
+    for i, _ in enumerate(res):
+        cv2.putText(_, "{}".format(i), (20, 20),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0))
+    return res
+
+############################################
 
 
 def line_intersect(A1, A2, B1, B2):
@@ -176,19 +251,8 @@ def filter_lines_by_rho(ls, threshold=25):
     return final_lines
 
 
-def detection(img, n_first_lines=50):
-    lines = cv2.HoughLines(img, 1, np.pi/180, 30)[:50]
-    lines_1, lines_2 = classify_lines_by_theta(lines)
-    lines_1, lines_2 = filter_lines_by_rho(lines_1), filter_lines_by_rho(lines_2)
-
-    return lines_1, lines_2
-
-
-def binary_to_rgb(binary):
-    rgb_img = np.ones((binary.shape[0], binary.shape[1], 3))
-    for i in range(rgb_img.shape[0]):
-        for j in range(rgb_img.shape[1]):
-            rgb_img[i][j] = [binary[i][j]]*3
+def gray_to_rgb(binary):
+    rgb_img = np.stack((binary, binary, binary), axis=2)
     return rgb_img
 
 
