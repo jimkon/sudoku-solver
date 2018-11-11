@@ -40,7 +40,7 @@ def run():
         filtered_image = filter_image(gray)  # display processed image
 
         # display_image = gray_to_rgb(filtered_image)
-        display_image = gray
+        display_image = gray_to_rgb(gray)
 
         points = detect(filtered_image)
         for i, p in enumerate(points):
@@ -77,12 +77,12 @@ def run():
 
     sudoku_image = cv2.resize(crop_image(gray, points), (9*DIGIT_RESOLUTION[0], 9*DIGIT_RESOLUTION[1]),
                               interpolation=cv2.INTER_CUBIC)  # INTER_AREA  for shrinking
-    print(sudoku_image.shape)
-    # cv2.imshow("cropped and resized", sudoku_image)
-    # c = cv2.waitKey(0)
+    print("cropped and resized", sudoku_image.shape)
+    cv2.imshow("cropped and resized", gray_to_rgb(sudoku_image))
+    c = cv2.waitKey(0)
 
     digits = crop_digits(sudoku_image)
-    print(sudoku_image.shape)
+    print("digits", digits.shape)
     temp = np.hstack(np.vstack(digits[np.arange(9)+offset*9]) for offset in np.arange(9))
     cv2.imshow("digits", temp)
     # temp = (temp for digit in digits)
@@ -140,14 +140,7 @@ def crop_image(img, points):
 def crop_digits(img):
     from itertools import product
 
-    # img = gray_to_rgb(img)
-
-    res = []
-
-    x = np.arange(9)
-    y = np.arange(9)
-    # print(x, y)
-    points = np.multiply(np.array(list(product(x, y))), DIGIT_RESOLUTION)
+    points = np.multiply(np.array(list(product(np.arange(9), np.arange(9)))), DIGIT_RESOLUTION)
     # print(points)
     # for p1 in points:
     #     p2 = p1+DIGIT_RESOLUTION
@@ -155,9 +148,9 @@ def crop_digits(img):
     #     cv2.circle(img, tuple(p2),  3, (0, 255, 255), -1)
 
     res = np.array(list(img[p[1]:p[1]+DIGIT_RESOLUTION[1], p[0]:p[0]+DIGIT_RESOLUTION[0]] for p in points))
-    for i, _ in enumerate(res):
-        cv2.putText(_, "{}".format(i), (20, 20),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0))
+    # for i, _ in enumerate(res):
+    #     cv2.putText(_, "{}".format(i), (20, 20),
+    #                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0))
     return res
 
 ############################################
@@ -251,8 +244,10 @@ def filter_lines_by_rho(ls, threshold=25):
     return final_lines
 
 
-def gray_to_rgb(binary):
-    rgb_img = np.stack((binary, binary, binary), axis=2)
+def gray_to_rgb(binary, mask=[1, 1, 1]):
+    # apply_mask = np.array([binary*mask[0], binary*mask[1], binary*mask[2]])
+    apply_mask = np.multiply(np.reshape(np.array(mask), (3, 1, 1)), [binary]*3)
+    rgb_img = np.stack(apply_mask, axis=2).astype(np.uint8)
     return rgb_img
 
 
