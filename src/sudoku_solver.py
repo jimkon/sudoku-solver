@@ -131,6 +131,7 @@ def filter_image(img, check_size=False):
         img = cv2.resize(img, (0, 0), fx=ratio**0.5, fy=ratio**0.5)
 
     blur = cv2.bilateralFilter(img, 9, 75, 75)
+
     th = 255-cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 11, 2)
 
     blur2 = cv2.medianBlur(th, 7)
