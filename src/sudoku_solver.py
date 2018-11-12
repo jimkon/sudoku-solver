@@ -182,7 +182,6 @@ def crop_and_resize_image(img, points, new_shape=None):
     pts2 = np.float32([a2, b2, c2, d2])
 
     M = cv2.getPerspectiveTransform(pts1, pts2)
-    print(M)
 
     res = cv2.warpPerspective(img, M, (w, h))
 
