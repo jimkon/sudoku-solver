@@ -11,11 +11,17 @@ DIGIT_RESOLUTION = (40, 40)
 TITLE = "Press q to quit and a when sudoku is detected"
 
 
-def run():
-    cap = cv2.VideoCapture(0)
+def init_window(dev_id=0):
+    cap = cv2.VideoCapture(dev_id)
     ret = cap.set(cv2.CAP_PROP_FRAME_WIDTH, RESOLUTION[1])
     ret = cap.set(cv2.CAP_PROP_FRAME_HEIGHT, RESOLUTION[0])
     cap.set(cv2.CAP_PROP_FPS, 60)
+
+    return cap
+
+
+def run():
+    cap = init_window(0)
     last_t = time.time()
     frames = 0
     fps = 0
@@ -30,10 +36,10 @@ def run():
             continue
         # Our operations on the frame come here
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
         frames += 1
         elapsed = time.time()-last_t
         if elapsed > 1:
-            print(frames)
             fps = frames
             frames = 0
             last_t = time.time()
@@ -59,47 +65,62 @@ def run():
         cv2.putText(display_image, "fps:{}".format(fps), (20, 20),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0))
         # display_image = np.hstack((gray, filtered_image))
-        cv2.imshow('{} frame shape:{}'.format(TITLE, gray.shape), display_image)
+        cv2.imshow('{}, frame shape:{}'.format(TITLE, gray.shape), display_image)
 
         c = cv2.waitKey(1) & 0xFF
         if c == ord('q'):
+            break
+        if c == ord('a') and points is not None:
             cap.release()
             cv2.destroyAllWindows()
-            return
-        if c == ord('a') and points is not None:
-            break
+
+            sudoku_image = crop_image(gray, points)
+
+            sudoku_image = cv2.resize(crop_image(gray, points), (9*DIGIT_RESOLUTION[0], 9*DIGIT_RESOLUTION[1]),
+                                      interpolation=cv2.INTER_CUBIC)  # INTER_AREA  for shrinking
+
+            digits = crop_digits(sudoku_image)
+
+            unsolved_sudoku = recognize_digits(digits)
+
+            display_image = gray_to_rgb(sudoku_image, mask=[
+                0.2, 0.2, 0.2]) + table_to_image(unsolved_sudoku)
+            display_image = extend_image(display_image, (440, 600, 3))
+            cv2.putText(display_image, "Press q to rerun detection, or any key to continue with solution",
+                        (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255))
+            cv2.imshow("Recognized sudoku", display_image)
+
+            c = cv2.waitKey(0) & 0xFF
+            if c == ord('q'):
+                cv2.destroyAllWindows()
+                cap = init_window(0)
+                continue
+
+            display_image = gray_to_rgb(sudoku_image, mask=[
+                0.2, 0.2, 0.2]) + table_to_image(unsolved_sudoku)
+            display_image = extend_image(display_image, (440, 600, 3))
+            cv2.putText(display_image, "Solving...",
+                        (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255))
+            cv2.imshow("Recognized sudoku", display_image)
+
+            solved_sudoku = solve(unsolved_sudoku)
+
+            solution = solved_sudoku-unsolved_sudoku
+            c = cv2.waitKey(0)
+            cv2.destroyAllWindows()
+            display_image = gray_to_rgb(sudoku_image, mask=[0.2, 0.2, 0.2]) + \
+                table_to_image(solution, color_mask=[0.8, 0, 0])+table_to_image(unsolved_sudoku)
+            display_image = extend_image(display_image, (440, 600, 3))
+            cv2.putText(display_image, "Press any key to continue...",
+                        (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255))
+            cv2.imshow("Solution", display_image)
+            c = cv2.waitKey(0)
+            cv2.destroyAllWindows()
+            cap = init_window(0)
 
     # When everything done, release the capture
+
     cap.release()
-    cv2.destroyAllWindows()
-
-    print(points)
-
-    sudoku_image = crop_image(gray, points)
-
-    sudoku_image = cv2.resize(crop_image(gray, points), (9*DIGIT_RESOLUTION[0], 9*DIGIT_RESOLUTION[1]),
-                              interpolation=cv2.INTER_CUBIC)  # INTER_AREA  for shrinking
-    # print("cropped and resized", sudoku_image.shape)
-    # cv2.imshow("cropped and resized", gray_to_rgb(sudoku_image))
-    # c = cv2.waitKey(0)
-
-    digits = crop_digits(sudoku_image)
-    print("digits", digits.shape)
-    table = recognize_digits(digits)
-    print("sudoku\n", table)
-    temp = gray_to_rgb(sudoku_image, mask=[0.2, 0.2, 0.2]) + table_to_image(table)
-    cv2.imshow("digits", temp)
-    # temp = (temp for digit in digits)
-    # cv2.imshow("cropped and resized", sudoku_image)
-    c = cv2.waitKey(0)
-
-    solved = solve(table)
-
-    new_numbers = solved-table
-    temp = gray_to_rgb(sudoku_image, mask=[0.2, 0.2, 0.2]) + \
-        table_to_image(new_numbers, color_mask=[0.8, 0, 0])+table_to_image(table)
-    cv2.imshow("digits", temp)
-    c = cv2.waitKey(0)
     cv2.destroyAllWindows()
 
 
@@ -173,19 +194,31 @@ def recognize_digits(digits):
     # return np.random.randint(10, size=(9, 9))
 
 
-def solve(table):
+def solve(unsolved_sudoku):
     # https://github.com/hbldh/dlxsudoku
     from dlxsudoku import Sudoku
 
-    s = table_to_string(table)
+    s = table_to_string(unsolved_sudoku)
     sudoku = Sudoku(s)
     sudoku.solve()
     return string_to_table(sudoku.to_oneliner())
 ############################################
 
 
-def table_to_string(table):
-    res = "".join(str(n) for n in np.array(table).flatten())
+def extend_image(img, new_shape, extention_value=0):
+    assert img.shape[0] <= new_shape[0] and img.shape[1] <= new_shape[1], "Error on extension shapes"
+
+    new_img = np.ones(new_shape)*extention_value
+    x, y = int((new_shape[1]-img.shape[1])/2), int((new_shape[0]-img.shape[0])/2)
+    w, h = img.shape[1], img.shape[0]
+
+    new_img[y:y+h, x:x+w] = img
+
+    return new_img.astype(np.uint8)
+
+
+def table_to_string(unsolved_sudoku):
+    res = "".join(str(n) for n in np.array(unsolved_sudoku).flatten())
     return res
 
 
