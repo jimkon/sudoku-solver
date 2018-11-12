@@ -135,13 +135,6 @@ def filter_image(img, check_size=False):
 
     blur2 = cv2.medianBlur(th, 7)
 
-    # # kernel = np.ones((5, 5), np.uint8)
-    # # opening = cv2.morphologyEx(blur2, cv2.MORPH_CLOSE, kernel)
-    # #
-    # # kernel = np.ones((7, 7), np.uint8)
-    # # dilation = cv2.dilate(opening, kernel, iterations=1)
-    #
-    # res = dilation
     res = blur2
 
     return res
@@ -171,18 +164,11 @@ def crop_digits(img):
     from itertools import product
 
     points = np.multiply(np.array(list(product(np.arange(9), np.arange(9)))), DIGIT_RESOLUTION)
-    # print(points)
-    # for p1 in points:
-    #     p2 = p1+DIGIT_RESOLUTION
-    #     cv2.circle(img, tuple(p1),  3, (0, 255, 0), -1)
-    #     cv2.circle(img, tuple(p2),  3, (0, 255, 255), -1)
 
     res = np.array(list(img[p[1]:p[1]+DIGIT_RESOLUTION[1], p[0]
                    :p[0]+DIGIT_RESOLUTION[0]] for p in points))
     res = np.reshape(res, (9, 9, DIGIT_RESOLUTION[0], DIGIT_RESOLUTION[1]))
-    # for i, _ in enumerate(res):
-    #     cv2.putText(_, "{}".format(i), (20, 20),
-    #                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0))
+
     return res
 
 
