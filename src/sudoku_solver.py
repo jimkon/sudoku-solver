@@ -373,6 +373,19 @@ def line_intersect(A1, A2, B1, B2):
     return [y, x]
 
 
+def rho_theta_to_coords(line, image_shape=None):
+    rho, theta = line
+    a = np.cos(theta)
+    b = np.sin(theta)
+    x0 = a*rho
+    y0 = b*rho
+    x1 = int(x0 + 2000*(-b))
+    y1 = int(y0 + 2000*(a))
+    x2 = int(x0 - 2000*(-b))
+    y2 = int(y0 - 2000*(a))
+    return x1, y1, x2, y2
+
+
 if __name__ == "__main__":
 
     run()
