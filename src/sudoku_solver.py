@@ -1,6 +1,7 @@
 import numpy as np
 import cv2
 import time
+import matplotlib.pyplot as plt
 
 
 # RESOLUTION = (240, 320)
@@ -45,22 +46,30 @@ def run():
             last_t = time.time()
 
         # Display the resulting frame
-        filtered_image = filter_image(gray)  # display processed image
+        biggest_contour, th_img = segment_image(gray)  # display processed image
 
-        display_image = gray_to_rgb(gray)
+        display_image = gray_to_rgb(gray, mask=[0.5, 0.5, 0.5])
 
-        points = np.array(detect(filtered_image))
+        mask = np.zeros(th_img.shape[:2], dtype="uint8")
+        cv2.drawContours(mask, [biggest_contour], -1, (255), -1)
+
+        points = detect(th_img, mask, biggest_contour)
+
+        segmented_image = np.multiply(mask, gray)
+
+        segment_color = [0, 0, 1]
+        if points is not None:
+            segment_color = [0, 1, 0]
+
+        display_image += gray_to_rgb(mask, mask=[_*.2 for _ in segment_color])
+
+        cv2.drawContours(display_image, biggest_contour, -1, [_*255 for _ in segment_color], 3)
+
         for i, p in enumerate(points):
-            c_p = [(255, 0, 0),
-                   (255, 0, 255),
-                   (0, 0, 255),
-                   (0, 0, 255)]
-            c = c_p[i]
-            prev_p = points[i-1]
             y1, x1 = p
-            y2, x2 = prev_p
+            y2, x2 = points[i-1]
+            cv2.circle(display_image, (x1, y1), 5, (255, 0, 0), -1)
 
-            cv2.circle(display_image, (x1, y1),  3, c, -1)
             cv2.line(display_image, (x1, y1), (x2, y2), (255, 0, 0), 1)
 
         # Display the fps
@@ -123,7 +132,7 @@ def run():
     cv2.destroyAllWindows()
 
 
-def filter_image(img, check_size=False):
+def segment_image(img, check_size=False):
     if check_size:
         DESIRABLE_AREA = RESOLUTION[0]*RESOLUTION[1]
         current_area = img.shape[0]*img.shape[1]
@@ -133,27 +142,43 @@ def filter_image(img, check_size=False):
 
     blur = cv2.bilateralFilter(img, 9, 75, 75)
 
-    th = 255-cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 11, 2)
+    th = 255-cv2.adaptiveThreshold(blur, 255,
+                                   cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 11, 2)
 
-    blur2 = cv2.medianBlur(th, 7)
+    size_th = 0.2*img.shape[0]*img.shape[1]
+#     print(size_th)
+    curr, contours, hierarchy = cv2.findContours(
+        np.copy(th), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    sizes = np.array([cv2.contourArea(contour) for contour in contours])
+    biggest_contour = contours[np.argmax(sizes)]
 
-    res = blur2
-
-    return res
+    return biggest_contour, th
 
 
-def detect(filtered_img):
+def detect(th_img, mask, biggest_contour):
+    segmented_image = np.multiply(mask, th_img)
 
-    length = int(0.8*RESOLUTION[0])
+    lines = cv2.HoughLines(segmented_image, 1, np.pi/180, 30)[:30]
 
-    x = int((RESOLUTION[1]-length)/2)
-    y = int((RESOLUTION[0]-length)/2)
-    w = length
-    h = length
+    coord_lines = [rho_theta_to_coords(line[0]) for line in lines]
 
-    return [y+200, x-20], [y, x+w+100], [y+h, x+w], [y+h-200, x]
-    # return [y, x], [y, x+w], [y+h, x+w], [y+h, x]
-    # return [y, x+10], [y, x+w+100], [y+h, x+w], [y+h, x]
+    intersection_points = [line_intersect(l1[:2], l1[2:], l2[:2], l2[2:])
+                           for l1 in coord_lines for l2 in coord_lines]
+    intersection_points = np.around([p for p in intersection_points if p is not None])
+    intersection_points = np.array(
+        [p for p in intersection_points if cv2.pointPolygonTest(biggest_contour, (p[1], p[0]), False) >= 0])
+
+    if len(intersection_points) < 4:
+        return None
+
+    min_x = intersection_points[np.argmin(intersection_points[:, 0])]
+    max_x = intersection_points[np.argmax(intersection_points[:, 0])]
+    min_y = intersection_points[np.argmin(intersection_points[:, 1])]
+    max_y = intersection_points[np.argmax(intersection_points[:, 1])]
+
+    final_points = np.array([min_x, max_x, min_y, max_y])
+
+    return np.around(final_points).astype(int)
 
 
 def crop_and_resize_image(img, points, new_shape=None):
@@ -272,7 +297,7 @@ def rho_theta_to_coords(line, image_shape=None):
     x2 = int(x0 - 2000*(-b))
     y2 = int(y0 - 2000*(a))
 
-    return x1, y1, x2, y2
+    return [x1, y1, x2, y2]
 
 
 def nearest_neighbors(arr, values):
@@ -299,6 +324,7 @@ def classify_lines_by_theta(ls):
     count, ths = np.histogram(thetas)
 
     th1, th2 = ths[((np.argsort(count))[::-1])[:2]]
+    print(th1, th2)
 
     thetas_1, thetas_2 = nearest_neighbors(thetas, [th1, th2])
 
@@ -330,23 +356,22 @@ def filter_lines_by_rho(ls, threshold=25):
 
 
 def gray_to_rgb(binary, mask=[1, 1, 1]):
-    # apply_mask = np.array([binary*mask[0], binary*mask[1], binary*mask[2]])
     apply_mask = np.multiply(np.reshape(np.array(mask), (3, 1, 1)), [binary]*3)
     rgb_img = np.stack(apply_mask, axis=2).astype(np.uint8)
     return rgb_img
 
 
-def rho_theta_to_coords(line, image_shape=None):
-    rho, theta = line
-    a = np.cos(theta)
-    b = np.sin(theta)
-    x0 = a*rho
-    y0 = b*rho
-    x1 = int(x0 + 2000*(-b))
-    y1 = int(y0 + 2000*(a))
-    x2 = int(x0 - 2000*(-b))
-    y2 = int(y0 - 2000*(a))
-    return x1, y1, x2, y2
+# def rho_theta_to_coords(line, image_shape=None):
+#     rho, theta = line
+#     a = np.cos(theta)
+#     b = np.sin(theta)
+#     x0 = a*rho
+#     y0 = b*rho
+#     x1 = int(x0 + 2000*(-b))
+#     y1 = int(y0 + 2000*(a))
+#     x2 = int(x0 - 2000*(-b))
+#     y2 = int(y0 - 2000*(a))
+#     return x1, y1, x2, y2
 
 
 def line_intersect(A1, A2, B1, B2):
@@ -383,7 +408,7 @@ def rho_theta_to_coords(line, image_shape=None):
     y1 = int(y0 + 2000*(a))
     x2 = int(x0 - 2000*(-b))
     y2 = int(y0 - 2000*(a))
-    return x1, y1, x2, y2
+    return y1, x1, y2, x2
 
 
 if __name__ == "__main__":
