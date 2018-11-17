@@ -37,6 +37,7 @@ def run():
             continue
         # Our operations on the frame come here
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        display_image = gray_to_rgb(gray, mask=[0.5, 0.5, 0.5])
 
         frames += 1
         elapsed = time.time()-last_t
@@ -46,36 +47,29 @@ def run():
             last_t = time.time()
 
         # Display the resulting frame
-        biggest_contour, th_img = segment_image(gray)  # display processed image
+        mask, biggest_contour, bin_img, segmented_image = segment_image(gray, apply_segmentation=True,
+                                                                        display={"img": display_image, "mask": [.5, .5, .5]})
 
-        display_image = gray_to_rgb(gray, mask=[0.5, 0.5, 0.5])
+        points = detect(bin_img, biggest_contour, display_image)
+        #
+        # segment_color = [0, 0, 1]
+        # if points is not None:
+        #     segment_color = [0, 1, 0]
+        #
+        # display_image += gray_to_rgb(mask, mask=[_*.2 for _ in segment_color])
+        #
+        # cv2.drawContours(display_image, biggest_contour, -1, [_*255 for _ in segment_color], 1)
 
-        mask = np.zeros(th_img.shape[:2], dtype="uint8")
-        cv2.drawContours(mask, [biggest_contour], -1, (255), -1)
-
-        points = detect(th_img, mask, biggest_contour)
-
-        segmented_image = np.multiply(mask, gray)
-
-        segment_color = [0, 0, 1]
-        if points is not None:
-            segment_color = [0, 1, 0]
-
-        display_image += gray_to_rgb(mask, mask=[_*.2 for _ in segment_color])
-
-        cv2.drawContours(display_image, biggest_contour, -1, [_*255 for _ in segment_color], 3)
-
-        for i, p in enumerate(points):
-            y1, x1 = p
-            y2, x2 = points[i-1]
-            cv2.circle(display_image, (x1, y1), 5, (255, 0, 0), -1)
-
-            cv2.line(display_image, (x1, y1), (x2, y2), (255, 0, 0), 1)
+        # for i, p in enumerate(points):
+        #     y1, x1 = p
+        #     y2, x2 = points[i-1]
+        #     cv2.circle(display_image, (x1, y1), 5, (255, 0, 0), -1)
+        #
+        #     cv2.line(display_image, (x1, y1), (x2, y2), (255, 0, 0), 1)
 
         # Display the fps
         cv2.putText(display_image, "fps:{}".format(fps), (20, 20),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0))
-        # display_image = np.hstack((gray, filtered_image))
         cv2.imshow('{}, frame shape:{}'.format(TITLE, gray.shape), display_image)
 
         c = cv2.waitKey(1) & 0xFF
@@ -132,13 +126,7 @@ def run():
     cv2.destroyAllWindows()
 
 
-def segment_image(img, check_size=False):
-    if check_size:
-        DESIRABLE_AREA = RESOLUTION[0]*RESOLUTION[1]
-        current_area = img.shape[0]*img.shape[1]
-        ratio = DESIRABLE_AREA/current_area
-
-        img = cv2.resize(img, (0, 0), fx=ratio**0.5, fy=ratio**0.5)
+def segment_image(img, apply_segmentation=False, display=None):
 
     blur = cv2.bilateralFilter(img, 9, 75, 75)
 
@@ -146,27 +134,91 @@ def segment_image(img, check_size=False):
                                    cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 11, 2)
 
     size_th = 0.2*img.shape[0]*img.shape[1]
-#     print(size_th)
+
     curr, contours, hierarchy = cv2.findContours(
         np.copy(th), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     sizes = np.array([cv2.contourArea(contour) for contour in contours])
     biggest_contour = contours[np.argmax(sizes)]
 
-    return biggest_contour, th
+    mask = np.zeros(th.shape[:2], dtype="uint8")
+    cv2.drawContours(mask, [biggest_contour], -1, (1), -1)
+    segmented_image = np.multiply(img, mask) if apply_segmentation else None
+    segmented_bin_image = np.multiply(th, mask) if apply_segmentation else None
+    if display is not None:
+        display["img"] += gray_to_rgb(segmented_image, display["mask"])
+        cv2.drawContours(display["img"], biggest_contour, -1, [255, 255, 255], 1)
+
+    return mask, biggest_contour, segmented_bin_image, segmented_image
 
 
-def detect(th_img, mask, biggest_contour):
-    segmented_image = np.multiply(mask, th_img)
+def detect(segmented_image, contour, display=None):
 
-    lines = cv2.HoughLines(segmented_image, 1, np.pi/180, 30)[:30]
+    lines = cv2.HoughLines(segmented_image, 1, np.pi/180, 30)[:50]
+
+    rhos = np.array([line[0][0] for line in lines])
+    thetas = np.array([line[0][1] for line in lines])*180/np.pi
+
+    count, bins = np.histogram(thetas, bins=30, range=[0, 180])
+    # print(count, bins)
+    t = count
+    t = np.hstack([t[len(t)-1], t])
+
+    cm = np.array([np.sum(t[i-1:i+1]) for i in range(len(t))])[1:]
+    cm = np.insert(cm, 0, cm[len(cm)-1], )
+    print(cm)
+    print(np.gradient(cm, 6))
+    bins = bins[:len(bins)-1]+3
+    bins = np.insert(bins, 0, -3)
+    # print(bins)
+    exit()
+    pts = np.array([[bins[i], display.shape[0]-cm[i]] for i in range(len(cm))]).astype(np.int32)
+    pts = pts.reshape((-1, 1, 2))
+    # print(pts)
+    cv2.polylines(display, [pts], False, (0, 0, 255), thickness=2)
+
+    c_max_ind = np.argmax(cm)
+    # print([[bins[i] - bins[i+1]] for i in range(len(bins)-1)])
+    # # degs *= 180/np.pi
+    # ths = np.array([np.average([bins[i], bins[i+1]]) for i in range(len(bins)-1)])
+    # # print(count, degs)
+    # # mn, mx = degs[np.argsort(count)[:-2]]
+    # arg_sort = np.argsort(count)[-2:]
+    # th1, th2 = ths[arg_sort]
+    # th1_min, th1_max = bins[arg_sort[0]], bins[arg_sort[0]+1]
+    # th2_min, th2_max = bins[arg_sort[1]], bins[arg_sort[1]+1]
+    # count = count[arg_sort]/len(lines)
+    #
+    # cv2.putText(display, "th1({}%) {}\n, min {} max {}".format(th1, count[0], th1_min, th1_max),
+    #             (20, display.shape[0]-100), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255))
+    # cv2.putText(display, "th2({}%) {}\n, min {} max {}".format(th2, count[1], th2_min, th2_max),
+    #             (20, display.shape[0]-50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255))
+    # ev =
+
+    # cv2.putText(display, "th1({}%) {}, th2({}%) {} diff({}%)={} ev={}".format(count[0], th1, count[1], th2,
+    #                                                                           np.sum(count), abs(th1-th2), np.average(count)),
+    #             (20, display.shape[0]-100), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255))
+    # plt.figure()
+    # plt.subplot(1, 2, 1)
+    # plt.hist(thetas, bins=5, color="r")
 
     coord_lines = [rho_theta_to_coords(line[0]) for line in lines]
+    for l in coord_lines:
+        y1, x1, y2, x2 = l
+        cv2.line(display, (x1, y1), (x2, y2), (255, 0, 0), 1)
 
-    intersection_points = [line_intersect(l1[:2], l1[2:], l2[:2], l2[2:])
+    # cv2.imshow("Sudoku", display)
+    # plt.subplot(1, 2, 2)
+    # plt.hist(thetas, bins=5, color="g")
+    # plt.show()
+
+    # cv2.imshow("Sudoku", binary_img)
+    # c = cv2.waitKey(0)
+    return None
+    intersection_points = [line_intersect(l1[: 2], l1[2:], l2[: 2], l2[2:])
                            for l1 in coord_lines for l2 in coord_lines]
     intersection_points = np.around([p for p in intersection_points if p is not None])
     intersection_points = np.array(
-        [p for p in intersection_points if cv2.pointPolygonTest(biggest_contour, (p[1], p[0]), False) >= 0])
+        [p for p in intersection_points if cv2.pointPolygonTest(contour, (p[1], p[0]), False) >= 0])
 
     if len(intersection_points) < 4:
         return None
@@ -176,9 +228,17 @@ def detect(th_img, mask, biggest_contour):
     min_y = intersection_points[np.argmin(intersection_points[:, 1])]
     max_y = intersection_points[np.argmax(intersection_points[:, 1])]
 
-    final_points = np.array([min_x, max_x, min_y, max_y])
+    final_points = np.around(np.array([min_x, max_x, min_y, max_y])).astype(np.int32)
 
-    return np.around(final_points).astype(int)
+    if display is not None:
+        for i, p in enumerate(final_points):
+            y1, x1 = p
+            y2, x2 = final_points[i-1]
+            cv2.circle(display, (x1, y1), 5, (255, 0, 0), -1)
+
+            cv2.line(display, (x1, y1), (x2, y2), (255, 0, 0), 1)
+
+    return final_points
 
 
 def crop_and_resize_image(img, points, new_shape=None):
@@ -199,10 +259,10 @@ def crop_and_resize_image(img, points, new_shape=None):
     tl, tr, br, bl = order_points(points)
     w = new_shape[1]
     h = new_shape[0]
-    a1, a2 = tl[::-1], [0, 0]
-    b1, b2 = tr[::-1], [0, w]
-    c1, c2 = br[::-1], [h, w]
-    d1, d2 = bl[::-1], [h, 0]
+    a1, a2 = tl[:: -1], [0, 0]
+    b1, b2 = tr[:: -1], [0, w]
+    c1, c2 = br[:: -1], [h, w]
+    d1, d2 = bl[:: -1], [h, 0]
     pts1 = np.float32([a1, b1, c1, d1])
     pts2 = np.float32([a2, b2, c2, d2])
 
@@ -218,8 +278,7 @@ def crop_digits(img):
 
     points = np.multiply(np.array(list(product(np.arange(9), np.arange(9)))), DIGIT_RESOLUTION)
 
-    res = np.array(list(img[p[1]: p[1]+DIGIT_RESOLUTION[1], p[0]
-                   : p[0]+DIGIT_RESOLUTION[0]] for p in points))
+    res = np.array(list(img[p[1]: p[1]+DIGIT_RESOLUTION[1], p[0]                            : p[0]+DIGIT_RESOLUTION[0]] for p in points))
     res = np.reshape(res, (9, 9, DIGIT_RESOLUTION[0], DIGIT_RESOLUTION[1]))
 
     return res
@@ -323,7 +382,7 @@ def classify_lines_by_theta(ls):
 
     count, ths = np.histogram(thetas)
 
-    th1, th2 = ths[((np.argsort(count))[::-1])[:2]]
+    th1, th2 = ths[((np.argsort(count))[:: -1])[: 2]]
     print(th1, th2)
 
     thetas_1, thetas_2 = nearest_neighbors(thetas, [th1, th2])
