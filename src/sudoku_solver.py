@@ -48,9 +48,11 @@ def run():
 
         # Display the resulting frame
         mask, biggest_contour, bin_img, segmented_image = segment_image(gray, apply_segmentation=True,
-                                                                        display={"img": display_image, "mask": [.5, .5, .5]})
+                                                                        display={"img": display_image, "mask": [.3, .3, .3]})
 
         points = detect(bin_img, biggest_contour, display_image)
+        # if points is not None:
+        # display_image = gray_to_rgb(mask, mask=[0, 0, .1])
         #
         # segment_color = [0, 0, 1]
         # if points is not None:
@@ -153,84 +155,103 @@ def segment_image(img, apply_segmentation=False, display=None):
 
 def detect(segmented_image, contour, display=None):
 
+    def cytrav(arr, index, window):
+        return np.array([arr[i] for i in np.mod(index+np.arange(window)-int(window/2), len(arr))])
+
     lines = cv2.HoughLines(segmented_image, 1, np.pi/180, 30)[:50]
 
     rhos = np.array([line[0][0] for line in lines])
     thetas = np.array([line[0][1] for line in lines])*180/np.pi
 
-    count, bins = np.histogram(thetas, bins=30, range=[0, 180])
-    # print(count, bins)
-    t = count
-    t = np.hstack([t[len(t)-1], t])
+    th_range = 30
+    thetas = np.sort(thetas)
 
-    cm = np.array([np.sum(t[i-1:i+1]) for i in range(len(t))])[1:]
-    cm = np.insert(cm, 0, cm[len(cm)-1], )
-    print(cm)
-    print(np.gradient(cm, 6))
-    bins = bins[:len(bins)-1]+3
-    bins = np.insert(bins, 0, -3)
-    # print(bins)
-    exit()
-    pts = np.array([[bins[i], display.shape[0]-cm[i]] for i in range(len(cm))]).astype(np.int32)
-    pts = pts.reshape((-1, 1, 2))
-    # print(pts)
-    cv2.polylines(display, [pts], False, (0, 0, 255), thickness=2)
+    thetas = np.hstack([thetas[np.searchsorted(thetas, 180-th_range, side='right'):]-180, thetas])
+    th_count = np.array([np.subtract(t[1], t[0]) for t in [np.searchsorted(thetas, [th-th_range, th],
+                                                                           side='right') for th in range(180)]])
+    f_th = np.copy(th_count)
+    for i, th in enumerate(th_count):
+        frame = cytrav(th_count, i, 50)
+        if any(th < frame):
+            f_th[i] = 0
 
-    c_max_ind = np.argmax(cm)
-    # print([[bins[i] - bins[i+1]] for i in range(len(bins)-1)])
-    # # degs *= 180/np.pi
-    # ths = np.array([np.average([bins[i], bins[i+1]]) for i in range(len(bins)-1)])
-    # # print(count, degs)
-    # # mn, mx = degs[np.argsort(count)[:-2]]
-    # arg_sort = np.argsort(count)[-2:]
-    # th1, th2 = ths[arg_sort]
-    # th1_min, th1_max = bins[arg_sort[0]], bins[arg_sort[0]+1]
-    # th2_min, th2_max = bins[arg_sort[1]], bins[arg_sort[1]+1]
-    # count = count[arg_sort]/len(lines)
-    #
-    # cv2.putText(display, "th1({}%) {}\n, min {} max {}".format(th1, count[0], th1_min, th1_max),
-    #             (20, display.shape[0]-100), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255))
-    # cv2.putText(display, "th2({}%) {}\n, min {} max {}".format(th2, count[1], th2_min, th2_max),
-    #             (20, display.shape[0]-50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255))
-    # ev =
+    res = []
+    s = -1
+    for i in range(len(f_th)):
+        if f_th[i] > f_th[i-1] and s < 0:
+            s = i
+        if f_th[i] < f_th[i-1] and s >= 0:
+            ind = np.average([s, i]).astype(np.int)
+            res.append(ind)
+            s = -1
+    res = np.array(res)
+    if len(res) < 2:
+        ev = 0
+    else:
+        res = res[np.argsort(th_count[res])[::-1]]
+        res = res[:2]*np.pi/180
 
-    # cv2.putText(display, "th1({}%) {}, th2({}%) {} diff({}%)={} ev={}".format(count[0], th1, count[1], th2,
-    #                                                                           np.sum(count), abs(th1-th2), np.average(count)),
-    #             (20, display.shape[0]-100), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255))
-    # plt.figure()
-    # plt.subplot(1, 2, 1)
-    # plt.hist(thetas, bins=5, color="r")
+        ls = np.array([np.array([l for l in lines if abs(l[0][1]-th) < np.pi/6]) for th in res])
+        # for l in ls[0]:
+        #     y1, x1, y2, x2 = rho_theta_to_coords(l[0])
+        #     cv2.line(display, (x1, y1), (x2, y2), (0, 0, 255), 1)
+        # for l in ls[1]:
+        #     y1, x1, y2, x2 = rho_theta_to_coords(l[0])
+        #     cv2.line(display, (x1, y1), (x2, y2), (0, 255, 0), 1)
 
-    coord_lines = [rho_theta_to_coords(line[0]) for line in lines]
-    for l in coord_lines:
-        y1, x1, y2, x2 = l
-        cv2.line(display, (x1, y1), (x2, y2), (255, 0, 0), 1)
+        line_stats = np.transpose([[np.min(ths), np.max(ths), np.average(ths), len(ths)]
+                                   for ths in [[line[0][1] for line in l] for l in ls]])
 
-    # cv2.imshow("Sudoku", display)
-    # plt.subplot(1, 2, 2)
-    # plt.hist(thetas, bins=5, color="g")
-    # plt.show()
+        # print(line_stats)
+        min_th, max_th, avg_th, count = line_stats
+        # print(min_th, max_th, avg_th, count)
+        th_range_factor = 1-(max_th-min_th)/(np.pi/6)
+        cv2.putText(display, "th_range_factor = {}".format(th_range_factor),
+                    (10, display.shape[0]-100), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255))
 
-    # cv2.imshow("Sudoku", binary_img)
-    # c = cv2.waitKey(0)
-    return None
-    intersection_points = [line_intersect(l1[: 2], l1[2:], l2[: 2], l2[2:])
-                           for l1 in coord_lines for l2 in coord_lines]
-    intersection_points = np.around([p for p in intersection_points if p is not None])
-    intersection_points = np.array(
-        [p for p in intersection_points if cv2.pointPolygonTest(contour, (p[1], p[0]), False) >= 0])
+        verticality_factor = 1-np.abs(np.abs(avg_th[0]-avg_th[1])/(np.pi/2)-1)
+        cv2.putText(display, "verticality_factor = {}".format(verticality_factor),
+                    (10, display.shape[0]-80), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255))
 
-    if len(intersection_points) < 4:
-        return None
+        count_threshold = 4
+        count_factor = (count-count_threshold)/(len(lines)-2*count_threshold)
+        cv2.putText(display, "count_factor = {}".format(count_factor),
+                    (10, display.shape[0]-60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255))
 
-    min_x = intersection_points[np.argmin(intersection_points[:, 0])]
-    max_x = intersection_points[np.argmax(intersection_points[:, 0])]
-    min_y = intersection_points[np.argmin(intersection_points[:, 1])]
-    max_y = intersection_points[np.argmax(intersection_points[:, 1])]
+        ev = np.sum(np.multiply(th_range_factor, count_factor))*verticality_factor
 
-    final_points = np.around(np.array([min_x, max_x, min_y, max_y])).astype(np.int32)
+    cv2.putText(display, "{}%".format(ev*100),
+                (10, display.shape[0]-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, int(ev*255), int((1-ev)*255)))
+    cv2.drawContours(display, [contour], -1, (0, int(ev*255), int((1-ev)*255)), 2)
 
-    if display is not None:
+    value_threshold = .75
+    if ev > value_threshold:
+        l_inds = np.array([[np.argmin(rhos), np.argmax(rhos)]
+                           for rhos in [[line[0][0] for line in l] for l in ls]])
+        l1_min, l1_max = [rho_theta_to_coords(l[0]) for l in ls[0][l_inds[0]]]
+        l2_min, l2_max = [rho_theta_to_coords(l[0]) for l in ls[1][l_inds[1]]]
+
+        final_points = np.around([line_intersect(l1_min[: 2], l1_min[2:], l2_min[: 2], l2_min[2:]),
+                                  line_intersect(l1_min[: 2], l1_min[2:], l2_max[: 2], l2_max[2:]),
+                                  line_intersect(l1_max[: 2], l1_max[2:], l2_min[: 2], l2_min[2:]),
+                                  line_intersect(l1_max[: 2], l1_max[2:], l2_max[: 2], l2_max[2:])]).astype(np.int)
+
+        def order_points(pts):
+            # https://www.pyimagesearch.com/2014/08/25/4-point-opencv-getperspective-transform-example/
+            rect = np.zeros((4, 2), dtype="float32")
+            s = pts.sum(axis=1)
+            rect[0] = pts[np.argmin(s)]
+            rect[2] = pts[np.argmax(s)]
+            diff = np.diff(pts, axis=1)
+            rect[1] = pts[np.argmin(diff)]
+            rect[3] = pts[np.argmax(diff)]
+            return rect
+        final_points = order_points(final_points)
+        # final_points = final_points[np.array([1, 0, 3, 2])]
+
+        if any(np.ravel(final_points) == np.inf):
+            return None, ev
+
         for i, p in enumerate(final_points):
             y1, x1 = p
             y2, x2 = final_points[i-1]
@@ -238,7 +259,8 @@ def detect(segmented_image, contour, display=None):
 
             cv2.line(display, (x1, y1), (x2, y2), (255, 0, 0), 1)
 
-    return final_points
+        return final_points, ev
+    return None, ev
 
 
 def crop_and_resize_image(img, points, new_shape=None):
