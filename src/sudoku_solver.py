@@ -50,7 +50,9 @@ def run():
         mask, biggest_contour, bin_img, segmented_image = segment_image(gray, apply_segmentation=True,
                                                                         display={"img": display_image, "mask": [.3, .3, .3]})
 
-        points = detect(bin_img, biggest_contour, display_image)
+        detection = detect(bin_img, biggest_contour, display_image)
+        if detection[0] is not None:
+            points = detection[0]
         # if points is not None:
         # display_image = gray_to_rgb(mask, mask=[0, 0, .1])
         #
@@ -80,7 +82,6 @@ def run():
         if c == ord('a') and points is not None:
             cap.release()
             cv2.destroyAllWindows()
-
             sudoku_image = crop_and_resize_image(gray, points,
                                                  new_shape=(9*DIGIT_RESOLUTION[0], 9*DIGIT_RESOLUTION[1]))
 
