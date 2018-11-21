@@ -191,16 +191,18 @@ def detect(segmented_image, contour, display=None):
         res = res[np.argsort(th_count[res])[::-1]]
         res = res[:2]*np.pi/180
 
-        ls = np.array([np.array([l for l in lines if abs(l[0][1]-th) < np.pi/6]) for th in res])
+        ls = np.array([np.array([l[0] for l in lines if abs(l[0][1]-th) < np.pi/6]) for th in res])
         # for l in ls[0]:
         #     y1, x1, y2, x2 = rho_theta_to_coords(l[0])
         #     cv2.line(display, (x1, y1), (x2, y2), (0, 0, 255), 1)
         # for l in ls[1]:
         #     y1, x1, y2, x2 = rho_theta_to_coords(l[0])
         #     cv2.line(display, (x1, y1), (x2, y2), (0, 255, 0), 1)
-
-        line_stats = np.transpose([[np.min(ths), np.max(ths), np.average(ths), len(ths)]
-                                   for ths in [[line[0][1] for line in l] for l in ls]])
+        line_stats = np.transpose([[np.min(ths),
+                                    np.max(ths),
+                                    np.average(ths),
+                                    len(ths)]
+                                   for ths in [[line[1] for line in l] for l in ls] if len(ths) >= 0])
 
         # print(line_stats)
         min_th, max_th, avg_th, count = line_stats
@@ -227,9 +229,9 @@ def detect(segmented_image, contour, display=None):
     value_threshold = .75
     if ev > value_threshold:
         l_inds = np.array([[np.argmin(rhos), np.argmax(rhos)]
-                           for rhos in [[line[0][0] for line in l] for l in ls]])
-        l1_min, l1_max = [rho_theta_to_coords(l[0]) for l in ls[0][l_inds[0]]]
-        l2_min, l2_max = [rho_theta_to_coords(l[0]) for l in ls[1][l_inds[1]]]
+                           for rhos in [[line[0] for line in l] for l in ls]])
+        l1_min, l1_max = [rho_theta_to_coords(l) for l in ls[0][l_inds[0]]]
+        l2_min, l2_max = [rho_theta_to_coords(l) for l in ls[1][l_inds[1]]]
 
         final_points = np.around([line_intersect(l1_min[: 2], l1_min[2:], l2_min[: 2], l2_min[2:]),
                                   line_intersect(l1_min[: 2], l1_min[2:], l2_max[: 2], l2_max[2:]),
@@ -300,7 +302,7 @@ def crop_digits(img):
 
     points = np.multiply(np.array(list(product(np.arange(9), np.arange(9)))), DIGIT_RESOLUTION)
 
-    res = np.array(list(img[p[1]: p[1]+DIGIT_RESOLUTION[1], p[0]                            : p[0]+DIGIT_RESOLUTION[0]] for p in points))
+    res = np.array(list(img[p[1]: p[1]+DIGIT_RESOLUTION[1], p[0]: p[0]+DIGIT_RESOLUTION[0]] for p in points))
     res = np.reshape(res, (9, 9, DIGIT_RESOLUTION[0], DIGIT_RESOLUTION[1]))
 
     return res
