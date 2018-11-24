@@ -2,12 +2,12 @@ import numpy as np
 import cv2
 import time
 import matplotlib.pyplot as plt
-
+import pytesseract
 
 # RESOLUTION = (240, 320)
 # RESOLUTION = (480, 640)
 RESOLUTION = (720, 1280)
-DIGIT_RESOLUTION = (40, 40)
+DIGIT_RESOLUTION = np.array([40, 40])
 
 TITLE = "Press q to quit and a when sudoku is detected"
 
@@ -26,15 +26,19 @@ def run():
     last_t = time.time()
     frames = 0
     fps = 0
-
     points = None
 
+    count = 0
+    imgs = [1, 7, 8]
     while(True):
         # Capture frame-by-frame
         ret, frame = cap.read()
+        path = "pics/test{}.jpg".format(imgs[count])
+        frame = cv2.imread(path, cv2.IMREAD_COLOR)
+
         if frame is None:
             print("null frame")
-            continue
+            exit()
         # Our operations on the frame come here
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         display_image = gray_to_rgb(gray, mask=[0.5, 0.5, 0.5])
@@ -80,9 +84,10 @@ def run():
         if c == ord('q'):
             break
         if c == ord('a') and points is not None:
+            count += 1
             cap.release()
             cv2.destroyAllWindows()
-            sudoku_image = crop_and_resize_image(gray, points,
+            sudoku_image = crop_and_resize_image(bin_img, points,
                                                  new_shape=(9*DIGIT_RESOLUTION[0], 9*DIGIT_RESOLUTION[1]))
 
             digits = crop_digits(sudoku_image)
@@ -303,13 +308,52 @@ def crop_digits(img):
 
     points = np.multiply(np.array(list(product(np.arange(9), np.arange(9)))), DIGIT_RESOLUTION)
 
-    res = np.array(list(img[p[1]: p[1]+DIGIT_RESOLUTION[1], p[0]: p[0]+DIGIT_RESOLUTION[0]] for p in points))
+    res = np.array([img[p[1]: p[1]+DIGIT_RESOLUTION[1], p[0]: p[0]+DIGIT_RESOLUTION[0]]
+                    for p in points])
     res = np.reshape(res, (9, 9, DIGIT_RESOLUTION[0], DIGIT_RESOLUTION[1]))
 
     return res
 
 
 def recognize_digits(digits):
+
+    from direc import Model
+    model = Model()
+    for row in digits:
+        for dgt in row:
+            img = dgt[6:34, 6:34]
+            print(model.predict(img))
+            cv2.imshow("d1", img)
+            cv2.waitKey(0)
+
+    exit()
+
+    # def filter_area(contour, img):
+    #     # contour area
+    #     area = cv2.contourArea(contour)
+    #     if area < 40*40*0.02 or area > 40*40*0.25:
+    #         return False
+    #     # contour convex hull area
+    #     x, y, w, h = cv2.boundingRect(contour)
+    #     area = w*h
+    #     if h < w or area < 40*40*0.02 or area > 40*40*0.5:
+    #         return False
+    #     contour_sum = img[y:y+h, x:x+w]
+    #     if np.sum(contour_sum)/area < 0.2:
+    #         return False
+    #     return True
+    #
+    # img = np.hstack(np.vstack(row) for row in digits)
+    # im2, contours, hierarchy = cv2.findContours(img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    # contours = [cnt for cnt in contours if filter_area(cnt, img/255)]
+    #
+    # img = gray_to_rgb(img)
+    # for c in contours:
+    #     cv2.drawContours(img, [c], 0, (0, 0, 255), 1)
+    #     x, y, w, h = cv2.boundingRect(c)
+    #     cv2.rectangle(img, (x, y), (x+w, y+h), (0, 255, 0), 1)
+    # cv2.imshow("d1", img)
+    # cv2.waitKey(0)
     # example sudoku
     return string_to_table("030467050920010006067300148301006027400850600090200400005624001203000504040030702")
     # return np.random.randint(10, size=(9, 9))

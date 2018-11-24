@@ -1,3 +1,4 @@
 pics/
 .ipynb_checkpoints/
 *.txt
+*.pyc
