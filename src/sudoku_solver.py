@@ -33,30 +33,42 @@ def run():
     while(True):
         # Capture frame-by-frame
         ret, frame = cap.read()
-        path = "pics/test{}.jpg".format(imgs[count])
-        frame = cv2.imread(path, cv2.IMREAD_COLOR)
+        # path = "pics/test{}.jpg".format(imgs[count])
+        # frame = cv2.imread(path, cv2.IMREAD_COLOR)
 
         if frame is None:
             print("null frame")
             exit()
         # Our operations on the frame come here
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        display_image = gray_to_rgb(gray, mask=[0.5, 0.5, 0.5])
+        # display = gray
+        display = gray_to_rgb(gray, mask=[.5, .5, .5])
 
         frames += 1
         elapsed = time.time()-last_t
         if elapsed > 1:
             fps = frames
+            # print(fps)
             frames = 0
             last_t = time.time()
 
-        # Display the resulting frame
-        mask, biggest_contour, bin_img, segmented_image = segment_image(gray, apply_segmentation=True,
-                                                                        display={"img": display_image, "mask": [.3, .3, .3]})
+        bin = to_binary(gray)
+        # display = bin
+        # display[:, :, 0] = bin
+        # display[:, :, 0] += (bin/2).astype(np.uint8)
 
-        detection = detect(bin_img, biggest_contour, display_image)
-        if detection[0] is not None:
-            points = detection[0]
+        mask, contour = segment_image(bin)
+
+        if mask is not None:
+            cv2.drawContours(display, [contour], -1, (255, 0, 0))
+
+        #
+        # segmented_bin = apply_mask(bin, mask)
+        #
+        # detection = detect(bin, biggest_contour, display)
+        # if detection[0] is not None:
+        #     points = detection[0]
+
         # if points is not None:
         # display_image = gray_to_rgb(mask, mask=[0, 0, .1])
         #
@@ -76,9 +88,9 @@ def run():
         #     cv2.line(display_image, (x1, y1), (x2, y2), (255, 0, 0), 1)
 
         # Display the fps
-        cv2.putText(display_image, "fps:{}".format(fps), (20, 20),
+        cv2.putText(display, "fps:{}".format(fps), (20, 20),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0))
-        cv2.imshow('{}, frame shape:{}'.format(TITLE, gray.shape), display_image)
+        cv2.imshow('{}, frame shape:'.format(TITLE), display)
 
         c = cv2.waitKey(1) & 0xFF
         if c == ord('q'):
@@ -134,29 +146,57 @@ def run():
     cv2.destroyAllWindows()
 
 
-def segment_image(img, apply_segmentation=False, display=None):
+def to_binary(gray):
+    gray = cv2.UMat(gray)
+    gray = cv2.GaussianBlur(gray, (7, 7), 1.5)
+    # gray = cv2.Canny(gray, 0, 50)
 
-    blur = cv2.bilateralFilter(img, 9, 75, 75)
+    # gray = cv2.dilate(gray, np.ones((5, 5)))
 
-    th = 255-cv2.adaptiveThreshold(blur, 255,
-                                   cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 11, 2)
+    # blur = cv2.bilateralFilter(gray, 9, 75, 75)
+    #
+    gray = cv2.adaptiveThreshold(gray, 255,
+                                 cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 11, 2)
+    #
+    # gray = cv2.medianBlur(gray, 9)
+    #
+    # gray = cv2.morphologyEx(gray, cv2.MORPH_CLOSE, np.ones((9, 9)))
+    gray = cv2.bitwise_not(gray)
+    gray = cv2.UMat.get(gray)
 
-    size_th = 0.2*img.shape[0]*img.shape[1]
+    return gray
+
+
+def segment_image(bin, error_th=.1):
 
     curr, contours, hierarchy = cv2.findContours(
-        np.copy(th), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        np.copy(bin), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    contours = np.array(contours)
+
     sizes = np.array([cv2.contourArea(contour) for contour in contours])
-    biggest_contour = contours[np.argmax(sizes)]
+    sorted_args = np.argsort(sizes)[::-1]
+    biggest_contours = contours[sorted_args[:10]]
 
-    mask = np.zeros(th.shape[:2], dtype="uint8")
-    cv2.drawContours(mask, [biggest_contour], -1, (1), -1)
-    segmented_image = np.multiply(img, mask) if apply_segmentation else None
-    segmented_bin_image = np.multiply(th, mask) if apply_segmentation else None
-    if display is not None:
-        display["img"] += gray_to_rgb(segmented_image, display["mask"])
-        cv2.drawContours(display["img"], biggest_contour, -1, [255, 255, 255], 1)
+    cont_stats = np.array([(cv2.arcLength(cnt, True), cv2.contourArea(cnt))
+                           for cnt in biggest_contours])
+    erros = np.array([np.abs(1-(area/perimeter)/((area**.5)/4))
+                      for perimeter, area in cont_stats if perimeter > 0])
 
-    return mask, biggest_contour, segmented_bin_image, segmented_image
+    filtered_contours_indexes = np.array([i for i, cnt in enumerate(
+        biggest_contours) if erros[i] < error_th])
+
+    if len(filtered_contours_indexes) == 0:
+        return None, None
+
+    # final_contour_index = filtered_contours_ind[np.argmax(cont_stats[filtered_contours_ind, 1])]
+    final_contour_index = np.min(filtered_contours_indexes)
+
+    final_contour = biggest_contours[final_contour_index]
+
+    mask = np.zeros(bin.shape[:2], dtype="uint8")
+    cv2.drawContours(mask, [final_contour], -1, (1), -1)
+
+    return mask, final_contour
 
 
 def detect(segmented_image, contour, display=None):
@@ -230,7 +270,7 @@ def detect(segmented_image, contour, display=None):
 
     cv2.putText(display, "{}%".format(ev*100),
                 (10, display.shape[0]-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, int(ev*255), int((1-ev)*255)))
-    cv2.drawContours(display, [contour], -1, (0, int(ev*255), int((1-ev)*255)), 2)
+    # cv2.drawContours(display, [contour], -1, (0, int(ev*255), int((1-ev)*255)), 2)
 
     value_threshold = .75
     if ev > value_threshold:
@@ -260,12 +300,12 @@ def detect(segmented_image, contour, display=None):
         if any(np.ravel(final_points) == np.inf):
             return None, ev
 
-        for i, p in enumerate(final_points):
-            y1, x1 = p
-            y2, x2 = final_points[i-1]
-            cv2.circle(display, (x1, y1), 5, (255, 0, 0), -1)
-
-            cv2.line(display, (x1, y1), (x2, y2), (255, 0, 0), 1)
+        # for i, p in enumerate(final_points):
+        #     y1, x1 = p
+        #     y2, x2 = final_points[i-1]
+        #     cv2.circle(display, (x1, y1), 5, (255, 0, 0), -1)
+        #
+        #     cv2.line(display, (x1, y1), (x2, y2), (255, 0, 0), 1)
 
         return final_points, ev
     return None, ev
@@ -368,6 +408,10 @@ def solve(unsolved_sudoku):
     sudoku.solve()
     return string_to_table(sudoku.to_oneliner())
 ############################################
+
+
+def apply_mask(img, mask):
+    return np.multiply(img, mask)
 
 
 def extend_image(img, new_shape, extention_value=0):
