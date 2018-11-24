@@ -60,7 +60,9 @@ def run():
         mask, contour = segment_image(bin)
 
         if mask is not None:
-            cv2.drawContours(display, [contour], -1, (255, 0, 0))
+            cv2.drawContours(display, [contour], -1, (255, 0, 0), 4)
+            cp, dims, rot, = cv2.minAreaRect(contour)
+            cv2.circle(display, tuple(np.array(list(cp)).astype(np.int)), 3, (0, 255, 0))
 
         #
         # segmented_bin = apply_mask(bin, mask)
@@ -177,13 +179,18 @@ def segment_image(bin, error_th=.1):
     sorted_args = np.argsort(sizes)[::-1]
     biggest_contours = contours[sorted_args[:10]]
 
-    cont_stats = np.array([(cv2.arcLength(cnt, True), cv2.contourArea(cnt))
+    dims = np.array([cv2.minAreaRect(cnt)[1] for cnt in biggest_contours])
+    aspect_ratios = np.array([np.min(dims)/np.max(dims) for dims in [cv2.minAreaRect(cnt)[1]
+                                                                     for cnt in biggest_contours]])
+    perim_area = np.array([(cv2.arcLength(cnt, True), cv2.contourArea(cnt))
                            for cnt in biggest_contours])
-    erros = np.array([np.abs(1-(area/perimeter)/((area**.5)/4))
-                      for perimeter, area in cont_stats if perimeter > 0])
+    perim_area_ratio = np.array([1-np.abs(1-(area/perimeter)/((area**.5)/4))
+                                 for perimeter, area in perim_area if perimeter > 0])
+
+    errors = 1-perim_area_ratio*aspect_ratios
 
     filtered_contours_indexes = np.array([i for i, cnt in enumerate(
-        biggest_contours) if erros[i] < error_th])
+        biggest_contours) if errors[i] < error_th])
 
     if len(filtered_contours_indexes) == 0:
         return None, None
