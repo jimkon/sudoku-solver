@@ -26,7 +26,7 @@ def run():
     last_t = time.time()
     frames = 0
     fps = 0
-    points = None
+    # points = None
 
     count = 0
     imgs = [1, 7, 8]
@@ -57,15 +57,37 @@ def run():
         # display[:, :, 0] = bin
         # display[:, :, 0] += (bin/2).astype(np.uint8)
 
-        mask, contour = segment_image(bin)
+        mask, contour = segment_image(bin, error_th=.3)
 
         if mask is not None:
             cv2.drawContours(display, [contour], -1, (255, 0, 0), 4)
             cp, dims, rot, = cv2.minAreaRect(contour)
             cv2.circle(display, tuple(np.array(list(cp)).astype(np.int)), 3, (0, 255, 0))
 
+            segmented_bin = apply_mask(bin, mask)
+
+            display = gray_to_rgb(segmented_bin)
+
+            detection = detect(segmented_bin, contour, display)
+            if detection[0] is not None:
+                points = detection[0]
+
+                if points is not None:
+                    for i, p in enumerate(points):
+                        y1, x1 = p
+                        y2, x2 = points[i-1]
+                        cv2.circle(display, (x1, y1), 5, (255, 0, 0), -1)
+
+                        cv2.line(display, (x1, y1), (x2, y2), (255, 0, 0), 1)
+            #
+                # sudoku_image = crop_and_resize_image(gray, points)
+                sudoku_image = crop_and_resize_image(gray, points,
+                                                     new_shape=(9*DIGIT_RESOLUTION[0], 9*DIGIT_RESOLUTION[1]))
+
+                sudoku_image = prerecognition_bin(sudoku_image)
+                display = sudoku_image
+                # display = extend_image(prerecognition_bin(sudoku_image), gray.shape)
         #
-        # segmented_bin = apply_mask(bin, mask)
         #
         # detection = detect(bin, biggest_contour, display)
         # if detection[0] is not None:
@@ -150,20 +172,16 @@ def run():
 
 def to_binary(gray):
     gray = cv2.UMat(gray)
+
     gray = cv2.GaussianBlur(gray, (7, 7), 1.5)
-    # gray = cv2.Canny(gray, 0, 50)
 
-    # gray = cv2.dilate(gray, np.ones((5, 5)))
-
-    # blur = cv2.bilateralFilter(gray, 9, 75, 75)
-    #
     gray = cv2.adaptiveThreshold(gray, 255,
                                  cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 11, 2)
-    #
-    # gray = cv2.medianBlur(gray, 9)
-    #
-    # gray = cv2.morphologyEx(gray, cv2.MORPH_CLOSE, np.ones((9, 9)))
+
     gray = cv2.bitwise_not(gray)
+
+    # gray = cv2.dilate(gray, np.ones((3, 3)))
+
     gray = cv2.UMat.get(gray)
 
     return gray
@@ -246,10 +264,10 @@ def detect(segmented_image, contour, display=None):
 
         ls = np.array([np.array([l[0] for l in lines if abs(l[0][1]-th) < np.pi/6]) for th in res])
         # for l in ls[0]:
-        #     y1, x1, y2, x2 = rho_theta_to_coords(l[0])
+        #     y1, x1, y2, x2 = rho_theta_to_coords(l)
         #     cv2.line(display, (x1, y1), (x2, y2), (0, 0, 255), 1)
         # for l in ls[1]:
-        #     y1, x1, y2, x2 = rho_theta_to_coords(l[0])
+        #     y1, x1, y2, x2 = rho_theta_to_coords(l)
         #     cv2.line(display, (x1, y1), (x2, y2), (0, 255, 0), 1)
         line_stats = np.transpose([[np.min(ths),
                                     np.max(ths),
@@ -291,16 +309,6 @@ def detect(segmented_image, contour, display=None):
                                   line_intersect(l1_max[: 2], l1_max[2:], l2_min[: 2], l2_min[2:]),
                                   line_intersect(l1_max[: 2], l1_max[2:], l2_max[: 2], l2_max[2:])]).astype(np.int)
 
-        def order_points(pts):
-            # https://www.pyimagesearch.com/2014/08/25/4-point-opencv-getperspective-transform-example/
-            rect = np.zeros((4, 2), dtype="float32")
-            s = pts.sum(axis=1)
-            rect[0] = pts[np.argmin(s)]
-            rect[2] = pts[np.argmax(s)]
-            diff = np.diff(pts, axis=1)
-            rect[1] = pts[np.argmin(diff)]
-            rect[3] = pts[np.argmax(diff)]
-            return rect
         final_points = order_points(final_points)
         # final_points = final_points[np.array([1, 0, 3, 2])]
 
@@ -321,33 +329,39 @@ def detect(segmented_image, contour, display=None):
 def crop_and_resize_image(img, points, new_shape=None):
     if new_shape is None:
         new_shape = img.shape
-
-    def order_points(pts):
-        # https://www.pyimagesearch.com/2014/08/25/4-point-opencv-getperspective-transform-example/
-        rect = np.zeros((4, 2), dtype="float32")
-        s = pts.sum(axis=1)
-        rect[0] = pts[np.argmin(s)]
-        rect[2] = pts[np.argmax(s)]
-        diff = np.diff(pts, axis=1)
-        rect[1] = pts[np.argmin(diff)]
-        rect[3] = pts[np.argmax(diff)]
-        return rect
+    new_shape = img.shape
 
     tl, tr, br, bl = order_points(points)
     w = new_shape[1]
     h = new_shape[0]
     a1, a2 = tl[:: -1], [0, 0]
-    b1, b2 = tr[:: -1], [0, w]
-    c1, c2 = br[:: -1], [h, w]
-    d1, d2 = bl[:: -1], [h, 0]
+    b1, b2 = tr[:: -1], [0, h]
+    c1, c2 = br[:: -1], [w, h]
+    d1, d2 = bl[:: -1], [w, 0]
     pts1 = np.float32([a1, b1, c1, d1])
     pts2 = np.float32([a2, b2, c2, d2])
 
+    for i in range(len(pts1)):
+        print(pts1[i], '-->', pts2[i])
     M = cv2.getPerspectiveTransform(pts1, pts2)
 
     res = cv2.warpPerspective(img, M, (w, h))
 
     return res
+
+
+def prerecognition_bin(gray):
+    gray = cv2.UMat(gray)
+
+    gray = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
+                                 cv2.THRESH_BINARY, 11, 2)
+    gray = cv2.GaussianBlur(gray, (3, 3), 1.5)
+
+    gray = cv2.Canny(gray, 0, 0)
+
+    gray = cv2.UMat.get(gray)
+
+    return gray
 
 
 def crop_digits(img):
@@ -417,7 +431,22 @@ def solve(unsolved_sudoku):
 ############################################
 
 
+def order_points(pts):
+    # https://www.pyimagesearch.com/2014/08/25/4-point-opencv-getperspective-transform-example/
+    rect = np.zeros((4, 2), dtype="float32")
+    s = pts.sum(axis=1)
+    rect[0] = pts[np.argmin(s)]
+    rect[2] = pts[np.argmax(s)]
+    diff = np.diff(pts, axis=1)
+    rect[1] = pts[np.argmin(diff)]
+    rect[3] = pts[np.argmax(diff)]
+    return rect
+
+
 def apply_mask(img, mask):
+    if len(img.shape) > 2:
+        mask = np.stack([mask]*img.shape[2], axis=2)
+
     return np.multiply(img, mask)
 
 
