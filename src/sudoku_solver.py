@@ -33,8 +33,8 @@ def run():
     while(True):
         # Capture frame-by-frame
         ret, frame = cap.read()
-        # path = "pics/test{}.jpg".format(imgs[count])
-        # frame = cv2.imread(path, cv2.IMREAD_COLOR)
+        path = "pics/test{}.jpg".format(imgs[count])
+        frame = cv2.imread(path, cv2.IMREAD_COLOR)
 
         if frame is None:
             print("null frame")
@@ -81,37 +81,99 @@ def run():
                         cv2.line(display, (x1, y1), (x2, y2), (255, 0, 0), 1)
             #
                 # sudoku_image = crop_and_resize_image(gray, points)
-                sudoku_image = crop_and_resize_image(gray, points,
-                                                     new_shape=(9*DIGIT_RESOLUTION[0], 9*DIGIT_RESOLUTION[1]))
+                sudoku = crop_and_resize_image(gray, points,
+                                               new_shape=(9*DIGIT_RESOLUTION[0], 9*DIGIT_RESOLUTION[1]))
 
-                sudoku_image = prerecognition_bin(sudoku_image)
-                display = sudoku_image
+                sudoku_bin = prerecognition_bin(sudoku)
+
+                star_size = 8
+                star_grabber = np.array(
+                    [[255 if i == j or i == star_size-1-j else 0 for i in range(star_size)] for j in range(star_size)]).astype(np.uint8)
+
+                mid_points = (2*DIGIT_RESOLUTION/5+np.array([np.array([x, y]) for x in np.arange(9)
+                                                             for y in np.arange(9)])*(DIGIT_RESOLUTION)).astype(np.int)
+                # mid_points = (DIGIT_RESOLUTION/2-np.array([np.array([x, y]) for x in np.arange(9)
+                #                                            for y in np.arange(9)])*(DIGIT_RESOLUTION)).astype(np.int)
+
+                for p in mid_points:
+                    sudoku_bin[int(p[0]-star_size/2):int(p[0]+star_size / 2),
+                               int(p[1]-star_size/2):int(p[1]+star_size / 2)] += star_grabber
+                    # cv2.circle(display, tuple(p), 1, (0, 0, 255), 2)
+
+                display = gray_to_rgb(sudoku_bin)
+                # display = sudoku_bin
+                # print("----\n", mid_points)
+                # exit()
+                curr, contours, hierarchy = cv2.findContours(
+                    np.copy(sudoku_bin), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+                # print(hierarchy[0, 0, 2:])
+                # print(all(np.equal(hierarchy[0, 0, 2:], [-1, -1])))
+                # print(len(hierarchy[0]), len(contours))
+                # exit()
+                mask = np.zeros(sudoku_bin.shape, dtype="uint8")
+
+                contours = [cnt for i, cnt in enumerate(contours) if any(
+                    [isPointInsideRectangle(cv2.boundingRect(cnt), p) for p in mid_points])]
+
+                # contours = [cnt for i, cnt in enumerate(contours) if all(np.equal(hierarchy[0, i, 2:], [-1, -1]))
+                #             and any([isPointInsideRectangle(cv2.boundingRect(cnt), p) for p in mid_points])]
+                # contours_hier = [[cnt, hierarchy[0, i]] for i, cnt in enumerate(contours) if any(
+                #     [isPointInsideRectangle(cv2.boundingRect(cnt), p) for p in mid_points])]
+                # for c, h in contours_hier:
+                #     print(h)
+
+                cv2.drawContours(mask, contours, -1, (255), -1)
+
+                # display = maskq
+
+                # contours_boxes = [cv2.boundingRect(cnt) for cnt in contours]
+                cv2.drawContours(display, contours, -1, (0, 255, 0))
+                # for box in contours_boxes:
+                #     x, y, w, h = box
+                #     cv2.rectangle(display, (x, y), (x+w, y+h), (0, 255, 0), 1)
+                areas = [cv2.contourArea(cnt) for cnt in contours]
+
+                pers = [cv2.arcLength(cnt, True) for cnt in contours]
+
+                c = cv2.waitKey(1) & 0xFF
+                if c == ord('k'):
+                    plt.subplot(1, 2, 1)
+                    # plt.tilte("areas")
+                    plt.hist(areas, bins=100)
+                    plt.subplot(1, 2, 2)
+                    # plt.tilte("pers")
+                    plt.hist(pers, bins=100)
+                    plt.show()
+
+                display = cv2.resize(display, (800, 600))
+
                 # display = extend_image(prerecognition_bin(sudoku_image), gray.shape)
-        #
-        #
-        # detection = detect(bin, biggest_contour, display)
-        # if detection[0] is not None:
-        #     points = detection[0]
+                #
+                #
+                # detection = detect(bin, biggest_contour, display)
+                # if detection[0] is not None:
+                #     points = detection[0]
 
-        # if points is not None:
-        # display_image = gray_to_rgb(mask, mask=[0, 0, .1])
-        #
-        # segment_color = [0, 0, 1]
-        # if points is not None:
-        #     segment_color = [0, 1, 0]
-        #
-        # display_image += gray_to_rgb(mask, mask=[_*.2 for _ in segment_color])
-        #
-        # cv2.drawContours(display_image, biggest_contour, -1, [_*255 for _ in segment_color], 1)
+                # if points is not None:
+                # display_image = gray_to_rgb(mask, mask=[0, 0, .1])
+                #
+                # segment_color = [0, 0, 1]
+                # if points is not None:
+                #     segment_color = [0, 1, 0]
+                #
+                # display_image += gray_to_rgb(mask, mask=[_*.2 for _ in segment_color])
+                #
+                # cv2.drawContours(display_image, biggest_contour, -1, [_*255 for _ in segment_color], 1)
 
-        # for i, p in enumerate(points):
-        #     y1, x1 = p
-        #     y2, x2 = points[i-1]
-        #     cv2.circle(display_image, (x1, y1), 5, (255, 0, 0), -1)
-        #
-        #     cv2.line(display_image, (x1, y1), (x2, y2), (255, 0, 0), 1)
+                # for i, p in enumerate(points):
+                #     y1, x1 = p
+                #     y2, x2 = points[i-1]
+                #     cv2.circle(display_image, (x1, y1), 5, (255, 0, 0), -1)
+                #
+                #     cv2.line(display_image, (x1, y1), (x2, y2), (255, 0, 0), 1)
 
-        # Display the fps
+                # Display the fps
         cv2.putText(display, "fps:{}".format(fps), (20, 20),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0))
         cv2.imshow('{}, frame shape:'.format(TITLE), display)
@@ -173,7 +235,7 @@ def run():
 def to_binary(gray):
     gray = cv2.UMat(gray)
 
-    gray = cv2.GaussianBlur(gray, (7, 7), 1.5)
+    # gray = cv2.GaussianBlur(gray, (7, 7), 1.5)
 
     gray = cv2.adaptiveThreshold(gray, 255,
                                  cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 11, 2)
@@ -329,7 +391,6 @@ def detect(segmented_image, contour, display=None):
 def crop_and_resize_image(img, points, new_shape=None):
     if new_shape is None:
         new_shape = img.shape
-    new_shape = img.shape
 
     tl, tr, br, bl = order_points(points)
     w = new_shape[1]
@@ -341,8 +402,6 @@ def crop_and_resize_image(img, points, new_shape=None):
     pts1 = np.float32([a1, b1, c1, d1])
     pts2 = np.float32([a2, b2, c2, d2])
 
-    for i in range(len(pts1)):
-        print(pts1[i], '-->', pts2[i])
     M = cv2.getPerspectiveTransform(pts1, pts2)
 
     res = cv2.warpPerspective(img, M, (w, h))
@@ -353,11 +412,12 @@ def crop_and_resize_image(img, points, new_shape=None):
 def prerecognition_bin(gray):
     gray = cv2.UMat(gray)
 
+    gray = cv2.GaussianBlur(gray, (3, 3), 1.5)
     gray = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
                                  cv2.THRESH_BINARY, 11, 2)
-    gray = cv2.GaussianBlur(gray, (3, 3), 1.5)
-
-    gray = cv2.Canny(gray, 0, 0)
+    #
+    # gray = cv2.Canny(gray, 0, 0)
+    gray = cv2.bitwise_not(gray)
 
     gray = cv2.UMat.get(gray)
 
@@ -429,6 +489,13 @@ def solve(unsolved_sudoku):
     sudoku.solve()
     return string_to_table(sudoku.to_oneliner())
 ############################################
+
+
+def isPointInsideRectangle(rect, p):
+    x, y, w, h = rect
+    px, py = p
+
+    return px >= x and px <= x+w and py >= y and py <= y+h
 
 
 def order_points(pts):
