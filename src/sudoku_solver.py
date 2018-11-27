@@ -85,68 +85,72 @@ def run():
                                                new_shape=(9*DIGIT_RESOLUTION[0], 9*DIGIT_RESOLUTION[1]))
 
                 sudoku_bin = prerecognition_bin(sudoku)
-
-                star_size = 8
-                star_grabber = np.array(
-                    [[255 if i == j or i == star_size-1-j else 0 for i in range(star_size)] for j in range(star_size)]).astype(np.uint8)
+                sudoku_bin = extend_image(sudoku_bin, np.array(sudoku_bin.shape)+2, 255)
+                # display = sudoku_bin
 
                 mid_points = (2*DIGIT_RESOLUTION/5+np.array([np.array([x, y]) for x in np.arange(9)
                                                              for y in np.arange(9)])*(DIGIT_RESOLUTION)).astype(np.int)
                 # mid_points = (DIGIT_RESOLUTION/2-np.array([np.array([x, y]) for x in np.arange(9)
                 #                                            for y in np.arange(9)])*(DIGIT_RESOLUTION)).astype(np.int)
 
-                for p in mid_points:
-                    sudoku_bin[int(p[0]-star_size/2):int(p[0]+star_size / 2),
-                               int(p[1]-star_size/2):int(p[1]+star_size / 2)] += star_grabber
-                    # cv2.circle(display, tuple(p), 1, (0, 0, 255), 2)
+                claws = claw_mask(sudoku_bin.shape, mid_points, 8)*255
 
-                display = gray_to_rgb(sudoku_bin)
-                # display = sudoku_bin
-                # print("----\n", mid_points)
-                # exit()
+                claws_on_sudoku = cv2.bitwise_or(sudoku_bin, claws)
+                display = gray_to_rgb(claws_on_sudoku)
                 curr, contours, hierarchy = cv2.findContours(
-                    np.copy(sudoku_bin), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+                    claws_on_sudoku, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
 
-                # print(hierarchy[0, 0, 2:])
-                # print(all(np.equal(hierarchy[0, 0, 2:], [-1, -1])))
-                # print(len(hierarchy[0]), len(contours))
-                # exit()
-                mask = np.zeros(sudoku_bin.shape, dtype="uint8")
+                # contours = [cnt for i, cnt in enumerate(contours) if any(
+                #     [isPointInsideRectangle(cv2.boundingRect(cnt), p) for p in mid_points])]
+                contours = [cnt for i, cnt in enumerate(contours) if (hierarchy[0, i, 3] == -1)]
+                # cv2.drawContours(display, contours, -1, (0, 0, 255))
+
+                # contours = [cnt for i, cnt in enumerate(contours) if hierarchy[0, i, -3] > -1]
 
                 contours = [cnt for i, cnt in enumerate(contours) if any(
-                    [isPointInsideRectangle(cv2.boundingRect(cnt), p) for p in mid_points])]
-
-                # contours = [cnt for i, cnt in enumerate(contours) if all(np.equal(hierarchy[0, i, 2:], [-1, -1]))
-                #             and any([isPointInsideRectangle(cv2.boundingRect(cnt), p) for p in mid_points])]
-                # contours_hier = [[cnt, hierarchy[0, i]] for i, cnt in enumerate(contours) if any(
-                #     [isPointInsideRectangle(cv2.boundingRect(cnt), p) for p in mid_points])]
-                # for c, h in contours_hier:
-                #     print(h)
-
-                cv2.drawContours(mask, contours, -1, (255), -1)
-
-                # display = maskq
-
-                # contours_boxes = [cv2.boundingRect(cnt) for cnt in contours]
+                    [(cv2.pointPolygonTest(cnt, tuple(p), False) > -1) for p in mid_points])]
                 cv2.drawContours(display, contours, -1, (0, 255, 0))
-                # for box in contours_boxes:
-                #     x, y, w, h = box
-                #     cv2.rectangle(display, (x, y), (x+w, y+h), (0, 255, 0), 1)
-                areas = [cv2.contourArea(cnt) for cnt in contours]
 
-                pers = [cv2.arcLength(cnt, True) for cnt in contours]
+                # print(hierarchy)
+                # # print(all(np.equal(hierarchy[0, 0, 2:], [-1, -1])))
+                # # print(len(hierarchy[0]), len(contours))
+                # exit()
+                # mask = np.zeros(sudoku_bin.shape, dtype="uint8")
+                #
+                # contours = [cnt for i, cnt in enumerate(contours) if any(
+                #     [isPointInsideRectangle(cv2.boundingRect(cnt), p) for p in mid_points])]
+                #
+                # # contours = [cnt for i, cnt in enumerate(contours) if all(np.equal(hierarchy[0, i, 2:], [-1, -1]))
+                # #             and any([isPointInsideRectangle(cv2.boundingRect(cnt), p) for p in mid_points])]
+                # # contours_hier = [[cnt, hierarchy[0, i]] for i, cnt in enumerate(contours) if any(
+                # #     [isPointInsideRectangle(cv2.boundingRect(cnt), p) for p in mid_points])]
+                # # for c, h in contours_hier:
+                # #     print(h)
+                #
+                # cv2.drawContours(mask, contours, -1, (255), -1)
+                #
+                # # display = maskq
+                #
+                # # contours_boxes = [cv2.boundingRect(cnt) for cnt in contours]
+                # cv2.drawContours(display, contours, -1, (0, 255, 0))
+                # # for box in contours_boxes:
+                # #     x, y, w, h = box
+                # #     cv2.rectangle(display, (x, y), (x+w, y+h), (0, 255, 0), 1)
+                # areas = [cv2.contourArea(cnt) for cnt in contours]
+                #
+                # pers = [cv2.arcLength(cnt, True) for cnt in contours]
+                #
+                # c = cv2.waitKey(1) & 0xFF
+                # if c == ord('k'):
+                #     plt.subplot(1, 2, 1)
+                #     # plt.tilte("areas")
+                #     plt.hist(areas, bins=100)
+                #     plt.subplot(1, 2, 2)
+                #     # plt.tilte("pers")
+                #     plt.hist(pers, bins=100)
+                #     plt.show()
 
-                c = cv2.waitKey(1) & 0xFF
-                if c == ord('k'):
-                    plt.subplot(1, 2, 1)
-                    # plt.tilte("areas")
-                    plt.hist(areas, bins=100)
-                    plt.subplot(1, 2, 2)
-                    # plt.tilte("pers")
-                    plt.hist(pers, bins=100)
-                    plt.show()
-
-                display = cv2.resize(display, (800, 600))
+                display = cv2.resize(display, (1000, 700))
 
                 # display = extend_image(prerecognition_bin(sudoku_image), gray.shape)
                 #
@@ -242,7 +246,7 @@ def to_binary(gray):
 
     gray = cv2.bitwise_not(gray)
 
-    # gray = cv2.dilate(gray, np.ones((3, 3)))
+    gray = cv2.dilate(gray, np.ones((3, 3)))
 
     gray = cv2.UMat.get(gray)
 
@@ -422,6 +426,19 @@ def prerecognition_bin(gray):
     gray = cv2.UMat.get(gray)
 
     return gray
+
+
+def claw_mask(img_shape, points, claw_size):
+
+    claw = np.array(
+        [[1 if i == j or i == claw_size-1-j else 0 for i in range(claw_size)] for j in range(claw_size)]).astype(np.uint8)
+
+    mask = np.zeros(img_shape, dtype=np.uint8)
+    for p in points:
+        mask[int(p[0]-claw_size/2):int(p[0]+claw_size / 2),
+             int(p[1]-claw_size/2):int(p[1]+claw_size / 2)] += claw
+
+    return mask
 
 
 def crop_digits(img):
