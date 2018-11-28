@@ -33,8 +33,8 @@ def run():
     while(True):
         # Capture frame-by-frame
         ret, frame = cap.read()
-        path = "pics/test{}.jpg".format(imgs[count])
-        frame = cv2.imread(path, cv2.IMREAD_COLOR)
+        # path = "pics/test{}.jpg".format(imgs[count])
+        # frame = cv2.imread(path, cv2.IMREAD_COLOR)
 
         if frame is None:
             print("null frame")
@@ -42,7 +42,7 @@ def run():
         # Our operations on the frame come here
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         # display = gray
-        display = gray_to_rgb(gray, mask=[.5, .5, .5])
+        display = gray_to_rgb(gray)
 
         frames += 1
         elapsed = time.time()-last_t
@@ -53,9 +53,6 @@ def run():
             last_t = time.time()
 
         bin = to_binary(gray)
-        # display = bin
-        # display[:, :, 0] = bin
-        # display[:, :, 0] += (bin/2).astype(np.uint8)
 
         mask, contour = segment_image(bin, error_th=.3)
 
@@ -85,70 +82,41 @@ def run():
                                                new_shape=(9*DIGIT_RESOLUTION[0], 9*DIGIT_RESOLUTION[1]))
 
                 sudoku_bin = prerecognition_bin(sudoku)
-                sudoku_bin = extend_image(sudoku_bin, np.array(sudoku_bin.shape)+2, 255)
-                # display = sudoku_bin
 
-                mid_points = (2*DIGIT_RESOLUTION/5+np.array([np.array([x, y]) for x in np.arange(9)
-                                                             for y in np.arange(9)])*(DIGIT_RESOLUTION)).astype(np.int)
+                digits = fetch_digits(sudoku_bin)
 
-                claws = claw_mask(sudoku_bin.shape, mid_points, 8)*255
+                display = gray_to_rgb(digits)
 
-                claws_on_sudoku = cv2.bitwise_or(sudoku_bin, claws)
-                curr, contours, hierarchy = cv2.findContours(
-                    claws_on_sudoku, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
+            # cv2.drawContours(display, contours, -1, (0, 255, 0))
+            # display = final_img
+            # display = cv2.resize(display, (1000, 700))
 
-                contours = [cnt for i, cnt in enumerate(contours) if (hierarchy[0, i, 3] == -1)]
+            # display = extend_image(prerecognition_bin(sudoku_image), gray.shape)
+            #
+            #
+            # detection = detect(bin, biggest_contour, display)
+            # if detection[0] is not None:
+            #     points = detection[0]
 
-                contours = [cnt for cnt in contours if any(
-                    [(cv2.pointPolygonTest(cnt, tuple(p), False) > -1) for p in mid_points])]
+            # if points is not None:
+            # display_image = gray_to_rgb(mask, mask=[0, 0, .1])
+            #
+            # segment_color = [0, 0, 1]
+            # if points is not None:
+            #     segment_color = [0, 1, 0]
+            #
+            # display_image += gray_to_rgb(mask, mask=[_*.2 for _ in segment_color])
+            #
+            # cv2.drawContours(display_image, biggest_contour, -1, [_*255 for _ in segment_color], 1)
 
-                areas = [np.prod(cv2.boundingRect(cnt)[2:]) for cnt in contours]
+            # for i, p in enumerate(points):
+            #     y1, x1 = p
+            #     y2, x2 = points[i-1]
+            #     cv2.circle(display_image, (x1, y1), 5, (255, 0, 0), -1)
+            #
+            #     cv2.line(display_image, (x1, y1), (x2, y2), (255, 0, 0), 1)
 
-                contours = [cnt for i, cnt in enumerate(
-                    contours) if areas[i] > 200 and areas[i] < 500]
-
-                mask = np.zeros(sudoku_bin.shape, np.uint8)
-                [cv2.rectangle(mask, (x, y), (x+w, y+h), (255), -1)
-                    for x, y, w, h in [cv2.boundingRect(cnt) for cnt in contours]]
-                # cv2.drawContours(mask, contours, -1, (255), -1)
-
-                digits = cv2.bitwise_and(mask, sudoku_bin)
-
-                final_img = cv2.distanceTransform(digits, cv2.DIST_L2, 3)
-                print(final_img)
-
-                display = final_img
-                # display = gray_to_rgb(sudoku_bin)
-                # cv2.drawContours(display, contours, -1, (0, 255, 0))
-
-                display = cv2.resize(display, (1000, 700))
-
-                # display = extend_image(prerecognition_bin(sudoku_image), gray.shape)
-                #
-                #
-                # detection = detect(bin, biggest_contour, display)
-                # if detection[0] is not None:
-                #     points = detection[0]
-
-                # if points is not None:
-                # display_image = gray_to_rgb(mask, mask=[0, 0, .1])
-                #
-                # segment_color = [0, 0, 1]
-                # if points is not None:
-                #     segment_color = [0, 1, 0]
-                #
-                # display_image += gray_to_rgb(mask, mask=[_*.2 for _ in segment_color])
-                #
-                # cv2.drawContours(display_image, biggest_contour, -1, [_*255 for _ in segment_color], 1)
-
-                # for i, p in enumerate(points):
-                #     y1, x1 = p
-                #     y2, x2 = points[i-1]
-                #     cv2.circle(display_image, (x1, y1), 5, (255, 0, 0), -1)
-                #
-                #     cv2.line(display_image, (x1, y1), (x2, y2), (255, 0, 0), 1)
-
-                # Display the fps
+            # Display the fps
         cv2.putText(display, "fps:{}".format(fps), (20, 20),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0))
         cv2.imshow('{}, frame shape:'.format(TITLE), display)
@@ -266,7 +234,12 @@ def detect(segmented_image, contour, display=None):
     def cytrav(arr, index, window):
         return np.array([arr[i] for i in np.mod(index+np.arange(window)-int(window/2), len(arr))])
 
-    lines = cv2.HoughLines(segmented_image, 1, np.pi/180, 30)[:50]
+    lines = cv2.HoughLines(segmented_image, 1, np.pi/180, 30)
+
+    if lines is not None:
+        lines = lines[:min(50, len(lines))]
+    else:
+        return None, 0
 
     rhos = np.array([line[0][0] for line in lines])
     thetas = np.array([line[0][1] for line in lines])*180/np.pi
@@ -410,6 +383,39 @@ def claw_mask(img_shape, points, claw_size):
              int(p[1]-claw_size/2):int(p[1]+claw_size / 2)] += claw
 
     return mask
+
+
+def fetch_digits(aligned__bin_image):
+    sudoku_bin = extend_image(aligned__bin_image, np.array(aligned__bin_image.shape)+2, 255)
+    # display = sudoku_bin
+
+    mid_points = (2*DIGIT_RESOLUTION/5+np.array([np.array([x, y]) for x in np.arange(9)
+                                                 for y in np.arange(9)])*(DIGIT_RESOLUTION)).astype(np.int)
+
+    claws = claw_mask(sudoku_bin.shape, mid_points, 8)*255
+
+    claws_on_sudoku = cv2.bitwise_or(sudoku_bin, claws)
+    curr, contours, hierarchy = cv2.findContours(
+        claws_on_sudoku, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
+
+    contours = [cnt for i, cnt in enumerate(contours) if (hierarchy[0, i, 3] == -1)]
+
+    contours = [cnt for cnt in contours if any(
+        [(cv2.pointPolygonTest(cnt, tuple(p), False) > -1) for p in mid_points])]
+
+    areas = [np.prod(cv2.boundingRect(cnt)[2:]) for cnt in contours]
+
+    contours = [cnt for i, cnt in enumerate(
+        contours) if areas[i] > 200 and areas[i] < 500]
+
+    mask2 = np.zeros(sudoku_bin.shape, np.uint8)
+    [cv2.rectangle(mask2, (x, y), (x+w, y+h), (255), -1)
+        for x, y, w, h in [cv2.boundingRect(cnt) for cnt in contours]]
+    # cv2.drawContours(mask, contours, -1, (255), -1)
+
+    digits = cv2.bitwise_and(sudoku_bin, mask2)
+
+    return digits
 
 
 def crop_digits(img):
