@@ -90,65 +90,36 @@ def run():
 
                 mid_points = (2*DIGIT_RESOLUTION/5+np.array([np.array([x, y]) for x in np.arange(9)
                                                              for y in np.arange(9)])*(DIGIT_RESOLUTION)).astype(np.int)
-                # mid_points = (DIGIT_RESOLUTION/2-np.array([np.array([x, y]) for x in np.arange(9)
-                #                                            for y in np.arange(9)])*(DIGIT_RESOLUTION)).astype(np.int)
 
                 claws = claw_mask(sudoku_bin.shape, mid_points, 8)*255
 
                 claws_on_sudoku = cv2.bitwise_or(sudoku_bin, claws)
-                display = gray_to_rgb(claws_on_sudoku)
                 curr, contours, hierarchy = cv2.findContours(
                     claws_on_sudoku, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
 
-                # contours = [cnt for i, cnt in enumerate(contours) if any(
-                #     [isPointInsideRectangle(cv2.boundingRect(cnt), p) for p in mid_points])]
                 contours = [cnt for i, cnt in enumerate(contours) if (hierarchy[0, i, 3] == -1)]
-                # cv2.drawContours(display, contours, -1, (0, 0, 255))
 
-                # contours = [cnt for i, cnt in enumerate(contours) if hierarchy[0, i, -3] > -1]
-
-                contours = [cnt for i, cnt in enumerate(contours) if any(
+                contours = [cnt for cnt in contours if any(
                     [(cv2.pointPolygonTest(cnt, tuple(p), False) > -1) for p in mid_points])]
-                cv2.drawContours(display, contours, -1, (0, 255, 0))
 
-                # print(hierarchy)
-                # # print(all(np.equal(hierarchy[0, 0, 2:], [-1, -1])))
-                # # print(len(hierarchy[0]), len(contours))
-                # exit()
-                # mask = np.zeros(sudoku_bin.shape, dtype="uint8")
-                #
-                # contours = [cnt for i, cnt in enumerate(contours) if any(
-                #     [isPointInsideRectangle(cv2.boundingRect(cnt), p) for p in mid_points])]
-                #
-                # # contours = [cnt for i, cnt in enumerate(contours) if all(np.equal(hierarchy[0, i, 2:], [-1, -1]))
-                # #             and any([isPointInsideRectangle(cv2.boundingRect(cnt), p) for p in mid_points])]
-                # # contours_hier = [[cnt, hierarchy[0, i]] for i, cnt in enumerate(contours) if any(
-                # #     [isPointInsideRectangle(cv2.boundingRect(cnt), p) for p in mid_points])]
-                # # for c, h in contours_hier:
-                # #     print(h)
-                #
+                areas = [np.prod(cv2.boundingRect(cnt)[2:]) for cnt in contours]
+
+                contours = [cnt for i, cnt in enumerate(
+                    contours) if areas[i] > 200 and areas[i] < 500]
+
+                mask = np.zeros(sudoku_bin.shape, np.uint8)
+                [cv2.rectangle(mask, (x, y), (x+w, y+h), (255), -1)
+                    for x, y, w, h in [cv2.boundingRect(cnt) for cnt in contours]]
                 # cv2.drawContours(mask, contours, -1, (255), -1)
-                #
-                # # display = maskq
-                #
-                # # contours_boxes = [cv2.boundingRect(cnt) for cnt in contours]
+
+                digits = cv2.bitwise_and(mask, sudoku_bin)
+
+                final_img = cv2.distanceTransform(digits, cv2.DIST_L2, 3)
+                print(final_img)
+
+                display = final_img
+                # display = gray_to_rgb(sudoku_bin)
                 # cv2.drawContours(display, contours, -1, (0, 255, 0))
-                # # for box in contours_boxes:
-                # #     x, y, w, h = box
-                # #     cv2.rectangle(display, (x, y), (x+w, y+h), (0, 255, 0), 1)
-                # areas = [cv2.contourArea(cnt) for cnt in contours]
-                #
-                # pers = [cv2.arcLength(cnt, True) for cnt in contours]
-                #
-                # c = cv2.waitKey(1) & 0xFF
-                # if c == ord('k'):
-                #     plt.subplot(1, 2, 1)
-                #     # plt.tilte("areas")
-                #     plt.hist(areas, bins=100)
-                #     plt.subplot(1, 2, 2)
-                #     # plt.tilte("pers")
-                #     plt.hist(pers, bins=100)
-                #     plt.show()
 
                 display = cv2.resize(display, (1000, 700))
 
