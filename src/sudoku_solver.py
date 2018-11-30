@@ -33,8 +33,8 @@ def run():
     while(True):
         # Capture frame-by-frame
         ret, frame = cap.read()
-        # path = "pics/test{}.jpg".format(imgs[count])
-        # frame = cv2.imread(path, cv2.IMREAD_COLOR)
+        path = "pics/test{}.jpg".format(imgs[count])
+        frame = cv2.imread(path, cv2.IMREAD_COLOR)
 
         if frame is None:
             print("null frame")
@@ -54,7 +54,7 @@ def run():
 
         bin = to_binary(gray)
 
-        mask, contour = segment_image(bin, error_th=.3)
+        mask, contour = segment_image(bin, error_th=.5)
 
         if mask is not None:
             cv2.drawContours(display, [contour], -1, (255, 0, 0), 4)
@@ -77,7 +77,7 @@ def run():
 
                         cv2.line(display, (x1, y1), (x2, y2), (255, 0, 0), 1)
             #
-                # sudoku_image = crop_and_resize_image(gray, points)
+                sudoku_image = crop_and_resize_image(gray, points)
                 sudoku = crop_and_resize_image(gray, points,
                                                new_shape=(9*DIGIT_RESOLUTION[0], 9*DIGIT_RESOLUTION[1]))
 
@@ -85,36 +85,16 @@ def run():
 
                 digits = fetch_digits(sudoku_bin)
 
-                display = gray_to_rgb(digits)
+                predictions = recognize_digits(digits)
+                # print(predictions)
 
-            # cv2.drawContours(display, contours, -1, (0, 255, 0))
-            # display = final_img
-            # display = cv2.resize(display, (1000, 700))
+                display = np.hstack(digits)
+                display = np.vstack([display, np.zeros(display.shape)])
+                for i, dgt in enumerate(digits):
+                    cv2.putText(display, "{}".format(predictions[i]), (5+i*digits.shape[1], 45),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255))
 
-            # display = extend_image(prerecognition_bin(sudoku_image), gray.shape)
-            #
-            #
-            # detection = detect(bin, biggest_contour, display)
-            # if detection[0] is not None:
-            #     points = detection[0]
-
-            # if points is not None:
-            # display_image = gray_to_rgb(mask, mask=[0, 0, .1])
-            #
-            # segment_color = [0, 0, 1]
-            # if points is not None:
-            #     segment_color = [0, 1, 0]
-            #
-            # display_image += gray_to_rgb(mask, mask=[_*.2 for _ in segment_color])
-            #
-            # cv2.drawContours(display_image, biggest_contour, -1, [_*255 for _ in segment_color], 1)
-
-            # for i, p in enumerate(points):
-            #     y1, x1 = p
-            #     y2, x2 = points[i-1]
-            #     cv2.circle(display_image, (x1, y1), 5, (255, 0, 0), -1)
-            #
-            #     cv2.line(display_image, (x1, y1), (x2, y2), (255, 0, 0), 1)
+                # display = gray_to_rgb(digits)
 
             # Display the fps
         cv2.putText(display, "fps:{}".format(fps), (20, 20),
@@ -124,50 +104,50 @@ def run():
         c = cv2.waitKey(1) & 0xFF
         if c == ord('q'):
             break
-        if c == ord('a') and points is not None:
-            count += 1
-            cap.release()
-            cv2.destroyAllWindows()
-            sudoku_image = crop_and_resize_image(bin_img, points,
-                                                 new_shape=(9*DIGIT_RESOLUTION[0], 9*DIGIT_RESOLUTION[1]))
-
-            digits = crop_digits(sudoku_image)
-
-            unsolved_sudoku = recognize_digits(digits)
-
-            display_image = gray_to_rgb(sudoku_image, mask=[
-                0.2, 0.2, 0.2]) + table_to_image(unsolved_sudoku)
-            display_image = extend_image(display_image, (440, 600, 3))
-            cv2.putText(display_image, "Press q to rerun detection, or any key to continue with solution",
-                        (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255))
-            cv2.imshow("Sudoku", display_image)
-
-            c = cv2.waitKey(0) & 0xFF
-            if c == ord('q'):
-                cv2.destroyAllWindows()
-                cap = init_window(0)
-                continue
-
-            display_image = gray_to_rgb(sudoku_image, mask=[
-                0.2, 0.2, 0.2]) + table_to_image(unsolved_sudoku)
-            display_image = extend_image(display_image, (440, 600, 3))
-            cv2.putText(display_image, "Solving...",
-                        (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255))
-            cv2.imshow("Sudoku", display_image)
-
-            solved_sudoku = solve(unsolved_sudoku)
-
-            solution = solved_sudoku-unsolved_sudoku
-
-            display_image = gray_to_rgb(sudoku_image, mask=[0.2, 0.2, 0.2]) + \
-                table_to_image(solution, color_mask=[0.8, 0, 0])+table_to_image(unsolved_sudoku)
-            display_image = extend_image(display_image, (440, 600, 3))
-            cv2.putText(display_image, "Press any key to continue...",
-                        (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255))
-            cv2.imshow("Sudoku", display_image)
-            c = cv2.waitKey(0)
-            cv2.destroyAllWindows()
-            cap = init_window(0)
+        # if c == ord('a') and points is not None:
+        #     count += 1
+        #     cap.release()
+        #     cv2.destroyAllWindows()
+        #     sudoku_image = crop_and_resize_image(bin_img, points,
+        #                                          new_shape=(9*DIGIT_RESOLUTION[0], 9*DIGIT_RESOLUTION[1]))
+        #
+        #     digits = crop_digits(sudoku_image)
+        #
+        #     unsolved_sudoku = recognize_digits(digits)
+        #
+        #     display_image = gray_to_rgb(sudoku_image, mask=[
+        #         0.2, 0.2, 0.2]) + table_to_image(unsolved_sudoku)
+        #     display_image = extend_image(display_image, (440, 600, 3))
+        #     cv2.putText(display_image, "Press q to rerun detection, or any key to continue with solution",
+        #                 (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255))
+        #     cv2.imshow("Sudoku", display_image)
+        #
+        #     c = cv2.waitKey(0) & 0xFF
+        #     if c == ord('q'):
+        #         cv2.destroyAllWindows()
+        #         cap = init_window(0)
+        #         continue
+        #
+        #     display_image = gray_to_rgb(sudoku_image, mask=[
+        #         0.2, 0.2, 0.2]) + table_to_image(unsolved_sudoku)
+        #     display_image = extend_image(display_image, (440, 600, 3))
+        #     cv2.putText(display_image, "Solving...",
+        #                 (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255))
+        #     cv2.imshow("Sudoku", display_image)
+        #
+        #     solved_sudoku = solve(unsolved_sudoku)
+        #
+        #     solution = solved_sudoku-unsolved_sudoku
+        #
+        #     display_image = gray_to_rgb(sudoku_image, mask=[0.2, 0.2, 0.2]) + \
+        #         table_to_image(solution, color_mask=[0.8, 0, 0])+table_to_image(unsolved_sudoku)
+        #     display_image = extend_image(display_image, (440, 600, 3))
+        #     cv2.putText(display_image, "Press any key to continue...",
+        #                 (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255))
+        #     cv2.imshow("Sudoku", display_image)
+        #     c = cv2.waitKey(0)
+        #     cv2.destroyAllWindows()
+        #     cap = init_window(0)
 
     # When everything done, release the capture
 
@@ -178,15 +158,13 @@ def run():
 def to_binary(gray):
     gray = cv2.UMat(gray)
 
-    # gray = cv2.GaussianBlur(gray, (7, 7), 1.5)
+    gray = cv2.GaussianBlur(gray, (7, 7), 1.5)
 
     gray = cv2.adaptiveThreshold(gray, 255,
                                  cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 11, 2)
 
     gray = cv2.bitwise_not(gray)
-
-    gray = cv2.dilate(gray, np.ones((3, 3)))
-
+    # gray = cv2.dilate(gray, np.ones((3, 3)))
     gray = cv2.UMat.get(gray)
 
     return gray
@@ -288,7 +266,7 @@ def detect(segmented_image, contour, display=None):
         # print(line_stats)
         min_th, max_th, avg_th, count = line_stats
         # print(min_th, max_th, avg_th, count)
-        th_range_factor = 1-(max_th-min_th)/(np.pi/6)
+        th_range_factor = np.abs(np.pi/6-np.abs(max_th-min_th))/(np.pi/6)
         cv2.putText(display, "th_range_factor = {}".format(th_range_factor),
                     (10, display.shape[0]-100), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255))
 
@@ -385,7 +363,7 @@ def claw_mask(img_shape, points, claw_size):
     return mask
 
 
-def fetch_digits(aligned__bin_image):
+def fetch_digits(aligned__bin_image, digit_shape=(28, 28)):
     sudoku_bin = extend_image(aligned__bin_image, np.array(aligned__bin_image.shape)+2, 255)
     # display = sudoku_bin
 
@@ -408,12 +386,31 @@ def fetch_digits(aligned__bin_image):
     contours = [cnt for i, cnt in enumerate(
         contours) if areas[i] > 200 and areas[i] < 500]
 
-    mask2 = np.zeros(sudoku_bin.shape, np.uint8)
-    [cv2.rectangle(mask2, (x, y), (x+w, y+h), (255), -1)
-        for x, y, w, h in [cv2.boundingRect(cnt) for cnt in contours]]
-    # cv2.drawContours(mask, contours, -1, (255), -1)
+    mask = np.zeros(sudoku_bin.shape, np.uint8)
+    # [cv2.rectangle(mask, (x, y), (x+w, y+h), (255), 1)
+    #     for x, y, w, h in [cv2.boundingRect(cnt) for cnt in contours]]
+    cv2.drawContours(mask, contours, -1, (255), -1)
 
-    digits = cv2.bitwise_and(sudoku_bin, mask2)
+    digits_only = cv2.bitwise_and(sudoku_bin, mask)
+    curr, contours, hierarchy = cv2.findContours(
+        digits_only, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    #
+    # curr, contours, hierarchy = cv2.findContours(
+    #     digits, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    #
+    # [cv2.rectangle(digits, (x, y), (x+w, y+h), (255))
+    #     for x, y, w, h in [cv2.boundingRect(cnt) for cnt in contours]]
+    digits = []
+    for cnt in contours:
+        x, y, w, h = cv2.boundingRect(cnt)
+        digit = cv2.threshold(cv2.resize(
+            digits_only[y:y+h, x:x+w], digit_shape), 1, 1, cv2.THRESH_BINARY)[1]
+
+        digits.append(digit)
+        # cv2.rectangle(digits_only, (x, y), (x+w, y+h), (255, 0, 0))
+
+    digits = np.array(digits)
 
     return digits
 
@@ -432,45 +429,38 @@ def crop_digits(img):
 
 def recognize_digits(digits):
 
-    from direc import Model
-    model = Model()
-    for row in digits:
-        for dgt in row:
-            img = dgt[6:34, 6:34]
-            print(model.predict(img))
-            cv2.imshow("d1", img)
-            cv2.waitKey(0)
+    # from direc import Model
+    # model = Model()
+    # templates =
+    templates = [cv2.threshold(cv2.imread("templates/dgt_{}.png".format(i), cv2.IMREAD_GRAYSCALE), 1, 1, cv2.THRESH_BINARY)[1]
+                 for i in range(10)]
 
-    exit()
+    def digit_matching(dgt, templates):
 
-    # def filter_area(contour, img):
-    #     # contour area
-    #     area = cv2.contourArea(contour)
-    #     if area < 40*40*0.02 or area > 40*40*0.25:
-    #         return False
-    #     # contour convex hull area
-    #     x, y, w, h = cv2.boundingRect(contour)
-    #     area = w*h
-    #     if h < w or area < 40*40*0.02 or area > 40*40*0.5:
-    #         return False
-    #     contour_sum = img[y:y+h, x:x+w]
-    #     if np.sum(contour_sum)/area < 0.2:
-    #         return False
-    #     return True
-    #
-    # img = np.hstack(np.vstack(row) for row in digits)
-    # im2, contours, hierarchy = cv2.findContours(img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    # contours = [cnt for cnt in contours if filter_area(cnt, img/255)]
-    #
-    # img = gray_to_rgb(img)
-    # for c in contours:
-    #     cv2.drawContours(img, [c], 0, (0, 0, 255), 1)
-    #     x, y, w, h = cv2.boundingRect(c)
-    #     cv2.rectangle(img, (x, y), (x+w, y+h), (0, 255, 0), 1)
-    # cv2.imshow("d1", img)
-    # cv2.waitKey(0)
-    # example sudoku
-    return string_to_table("030467050920010006067300148301006027400850600090200400005624001203000504040030702")
+        scores = [1-np.sum(cv2.bitwise_xor(tmp, dgt)) / np.prod(tmp.shape)
+                  for tmp in templates]
+        # print(scores)
+        res = np.argmax(scores)
+        score = scores[res]
+        # for r in dgt:
+        #     print(r)
+        # for r in templates[np.argmax(rates)]:
+        #     print(r)
+        # cv2.imshow("asda", np.hstack(
+        #     [dgt, templates[res], np.abs(templates[res]-dgt)]))
+        # cv2.imshow("asda", np.hstack([dgt*255, np.hstack(
+        #     [cv2.bitwise_xor(tmp, dgt)*255 for tmp in templates]), templates[res]*255]))
+        # print(res, score)
+        # cv2.waitKey(0)
+        return [res, score]
+
+    pred = []
+    for dgt in digits:
+        # pred.append(model.predict(dgt))
+        pred.append(digit_matching(dgt, templates)[0])
+
+    return pred
+    # return string_to_table("030467050920010006067300148301006027400850600090200400005624001203000504040030702")
     # return np.random.randint(10, size=(9, 9))
 
 
@@ -681,5 +671,12 @@ def rho_theta_to_coords(line, image_shape=None):
 
 
 if __name__ == "__main__":
-
+    # from dlxsudoku import Sudoku
+    # sud = "030467050920010006067300148301006027400850600090200400005624001203000504040030702"
+    # s = string_to_table(
+    #     sud)
+    # print(s)
+    # sudoku = Sudoku(sud)
+    # sudoku.solve()
+    # print(string_to_table(sudoku.to_oneliner()))
     run()
