@@ -83,18 +83,42 @@ def run():
 
                 sudoku_bin = prerecognition_bin(sudoku)
 
-                digits = fetch_digits(sudoku_bin)
+                digits, boxes = fetch_digits(sudoku_bin)
 
-                predictions = recognize_digits(digits)
-                # print(predictions)
+                locations = np.array([[int(y+h/2), (x+w/2)] for y, x, h, w in boxes])
+                rel_locations = np.array(locations/DIGIT_RESOLUTION).astype(np.int)
+                predictions = np.array(recognize_digits(digits))
 
-                display = np.hstack(digits)
-                display = np.vstack([display, np.zeros(display.shape)])
+                given_sudoku_table = np.zeros((9, 9), np.int)
+                for i, p in enumerate(rel_locations):
+                    given_sudoku_table[p[0], p[1]] = predictions[i]
+                # print(given_sudoku_table)
+
+                display = gray_to_rgb(sudoku_bin)
                 for i, dgt in enumerate(digits):
-                    cv2.putText(display, "{}".format(predictions[i]), (5+i*digits.shape[1], 45),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255))
+                    y, x, h, w = boxes[i]
+                    scale = cv2.resize(dgt, (w, h))*255
+                    display[y:y+h, x:x+w, 0] = scale
+                    display[y:y+h, x:x+w, 1] = np.zeros((h, w), int)
+                    display[y:y+h, x:x+w, 2] = np.zeros((h, w), int)
 
-                # display = gray_to_rgb(digits)
+                solved_sudoku_table = solve(given_sudoku_table)
+
+                new_numbs = solved_sudoku_table-given_sudoku_table
+                digit_set = [digits[np.where(predictions == n)[0][0]] for n in range(1, 10)]
+                for i in range(9):
+                    for j in range(9):
+                        y, x, h, w = int(DIGIT_RESOLUTION[0]/4+i *
+                                         DIGIT_RESOLUTION[0]), int(DIGIT_RESOLUTION[1]/4+j*DIGIT_RESOLUTION[1]), 23, 16
+
+                        n = new_numbs[i][j]
+                        if n == 0:
+                            continue
+                        dgt = digit_set[n-1]
+                        scale = cv2.resize(dgt, (w, h))*255
+                        display[y:y+h, x:x+w, 0] = np.zeros((h, w), int)
+                        display[y:y+h, x:x+w, 1] = scale
+                        display[y:y+h, x:x+w, 2] = np.zeros((h, w), int)
 
             # Display the fps
         cv2.putText(display, "fps:{}".format(fps), (20, 20),
@@ -402,17 +426,19 @@ def fetch_digits(aligned__bin_image, digit_shape=(28, 28)):
     # [cv2.rectangle(digits, (x, y), (x+w, y+h), (255))
     #     for x, y, w, h in [cv2.boundingRect(cnt) for cnt in contours]]
     digits = []
+    boxes = []
     for cnt in contours:
         x, y, w, h = cv2.boundingRect(cnt)
         digit = cv2.threshold(cv2.resize(
             digits_only[y:y+h, x:x+w], digit_shape), 1, 1, cv2.THRESH_BINARY)[1]
 
         digits.append(digit)
-        # cv2.rectangle(digits_only, (x, y), (x+w, y+h), (255, 0, 0))
+        boxes.append([y-1, x-1, h, w])
 
     digits = np.array(digits)
+    boxes = np.array(boxes)
 
-    return digits
+    return digits, boxes
 
 
 def crop_digits(img):
