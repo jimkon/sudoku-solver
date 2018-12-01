@@ -77,7 +77,6 @@ def run():
 
                         cv2.line(display, (x1, y1), (x2, y2), (255, 0, 0), 1)
             #
-                sudoku_image = crop_and_resize_image(gray, points)
                 sudoku = crop_and_resize_image(gray, points,
                                                new_shape=(9*DIGIT_RESOLUTION[0], 9*DIGIT_RESOLUTION[1]))
 
@@ -338,7 +337,21 @@ def detect(segmented_image, contour, display=None):
     return None, ev
 
 
+def project(src, src_pts, dest_pts, dest_shape=None):
+    if dest_shape is None:
+        dest_shape = src.shape
+
+    src_pts = np.float32(order_points(src_pts))
+    dest_pts = np.float32(order_points(dest_pts))
+
+    M = cv2.getPerspectiveTransform(src_pts, dest_pts)
+    res = cv2.warpPerspective(src, M, (dest_shape[1], dest_shape[0]))
+
+    return res
+
+
 def crop_and_resize_image(img, points, new_shape=None):
+
     if new_shape is None:
         new_shape = img.shape
 
@@ -352,9 +365,7 @@ def crop_and_resize_image(img, points, new_shape=None):
     pts1 = np.float32([a1, b1, c1, d1])
     pts2 = np.float32([a2, b2, c2, d2])
 
-    M = cv2.getPerspectiveTransform(pts1, pts2)
-
-    res = cv2.warpPerspective(img, M, (w, h))
+    res = project(img, pts1, pts2, new_shape)
 
     return res
 
