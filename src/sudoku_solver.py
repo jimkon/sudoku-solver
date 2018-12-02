@@ -86,12 +86,15 @@ def run():
 
                 locations = np.array([[int(y+h/2), (x+w/2)] for y, x, h, w in boxes])
                 rel_locations = np.array(locations/DIGIT_RESOLUTION).astype(np.int)
-                predictions = np.array(recognize_digits(digits))
+                predictions, scores = recognize_digits(digits)
+
+                digit_set = select_digit_set(digits, predictions, scores)
 
                 given_sudoku_table = np.zeros((9, 9), np.int)
                 for i, p in enumerate(rel_locations):
                     given_sudoku_table[p[0], p[1]] = predictions[i]
-                # print(given_sudoku_table)
+
+                solved_sudoku_table = solve(given_sudoku_table)
 
                 display = gray_to_rgb(sudoku_bin)
                 for i, dgt in enumerate(digits):
@@ -101,10 +104,7 @@ def run():
                     display[y:y+h, x:x+w, 1] = np.zeros((h, w), int)
                     display[y:y+h, x:x+w, 2] = np.zeros((h, w), int)
 
-                solved_sudoku_table = solve(given_sudoku_table)
-
                 new_numbs = solved_sudoku_table-given_sudoku_table
-                digit_set = [digits[np.where(predictions == n)[0][0]] for n in range(1, 10)]
                 for i in range(9):
                     for j in range(9):
                         y, x, h, w = int(DIGIT_RESOLUTION[0]/4+i *
@@ -492,13 +492,30 @@ def recognize_digits(digits):
         return [res, score]
 
     pred = []
+    scores = []
     for dgt in digits:
         # pred.append(model.predict(dgt))
-        pred.append(digit_matching(dgt, templates)[0])
+        n, score = digit_matching(dgt, templates)
+        pred.append(n)
+        scores.append(score)
 
-    return pred
+    pred = np.array(pred)
+    scores = np.array(scores)
+
+    return pred, scores
     # return string_to_table("030467050920010006067300148301006027400850600090200400005624001203000504040030702")
     # return np.random.randint(10, size=(9, 9))
+
+
+def select_digit_set(digits, predictions, scores):
+
+    sort_digits = np.array([np.where(predictions == n)[0] for n in range(1, 10)])
+
+    max_digit_scores = np.array([inds[np.argmax(scores[inds])] for inds in sort_digits])
+
+    digit_set = digits[max_digit_scores]
+
+    return digit_set
 
 
 def solve(unsolved_sudoku):
