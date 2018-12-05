@@ -82,23 +82,23 @@ def run():
 
                 sudoku_bin = prerecognition_bin(sudoku)
 
-                digits, boxes = fetch_digits(sudoku_bin)
+                digits, digit_boxes = fetch_digits(sudoku_bin)
 
-                locations = np.array([[int(y+h/2), (x+w/2)] for y, x, h, w in boxes])
-                rel_locations = np.array(locations/DIGIT_RESOLUTION).astype(np.int)
+                table_locations, yx_axes, dims = process_box_data(digit_boxes)
+
                 predictions, scores = recognize_digits(digits)
 
                 digit_set = select_digit_set(digits, predictions, scores)
 
                 given_sudoku_table = np.zeros((9, 9), np.int)
-                for i, p in enumerate(rel_locations):
+                for i, p in enumerate(table_locations):
                     given_sudoku_table[p[0], p[1]] = predictions[i]
 
                 solved_sudoku_table = solve(given_sudoku_table)
 
                 display = gray_to_rgb(sudoku_bin)
                 for i, dgt in enumerate(digits):
-                    y, x, h, w = boxes[i]
+                    y, x, h, w = digit_boxes[i]
                     scale = cv2.resize(dgt, (w, h))*255
                     display[y:y+h, x:x+w, 0] = scale
                     display[y:y+h, x:x+w, 1] = np.zeros((h, w), int)
@@ -107,8 +107,7 @@ def run():
                 new_numbs = solved_sudoku_table-given_sudoku_table
                 for i in range(9):
                     for j in range(9):
-                        y, x, h, w = int(DIGIT_RESOLUTION[0]/4+i *
-                                         DIGIT_RESOLUTION[0]), int(DIGIT_RESOLUTION[1]/4+j*DIGIT_RESOLUTION[1]), 23, 16
+                        y, x, h, w = yx_axes[0, i], yx_axes[1, j], dims[0], dims[1]
 
                         n = new_numbs[i][j]
                         if n == 0:
@@ -450,6 +449,22 @@ def fetch_digits(aligned__bin_image, digit_shape=(28, 28)):
     boxes = np.array(boxes)
 
     return digits, boxes
+
+
+def process_box_data(boxes):
+    mid_locations = np.array([[int(y+h/2), (x+w/2)] for y, x, h, w in boxes])
+    table_locations = np.array(mid_locations/DIGIT_RESOLUTION).astype(np.int)
+
+    ys = np.around([np.average(boxes[np.where(table_locations[:, 0] == n)[0], 0])
+                    for n in range(9)]).astype(np.int)
+
+    xs = np.around([np.average(boxes[np.where(table_locations[:, 1] == n)[0], 1])
+                    for n in range(9)]).astype(np.int)
+
+    dims = np.array([[h, w] for y, x, h, w in boxes])
+    avg_dims = np.around(np.average(dims, axis=0)).astype(np.int)
+
+    return table_locations, np.array([ys, xs]), avg_dims
 
 
 def crop_digits(img):
