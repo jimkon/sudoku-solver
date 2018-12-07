@@ -76,9 +76,9 @@ def run():
                         cv2.circle(display, (x1, y1), 5, (255, 0, 0), -1)
 
                         cv2.line(display, (x1, y1), (x2, y2), (255, 0, 0), 1)
-            #
-                sudoku = crop_and_resize_image(gray, points,
-                                               new_shape=(9*DIGIT_RESOLUTION[0], 9*DIGIT_RESOLUTION[1]))
+
+                sudoku = cv2.resize(project(gray, points, None), (
+                    9*DIGIT_RESOLUTION[0], 9*DIGIT_RESOLUTION[1]))
 
                 sudoku_bin = prerecognition_bin(sudoku)
 
@@ -99,10 +99,8 @@ def run():
                 sud = draw_sudoku(solved_sudoku_table, digit_set,
                                   digit_points, dims, sudoku_bin.shape)
 
-                sud2 = draw_sudoku(given_sudoku_table, digit_set,
-                                   digit_points, dims, sudoku_bin.shape)
-                cv2.imshow("ASda", np.hstack([sud2, sud]))
-                cv2.waitKey(0)
+                sud = project(sud, None, points, gray.shape)
+
                 display = sud
 
                 # display = gray_to_rgb(sudoku_bin)
@@ -349,31 +347,20 @@ def project(src, src_pts, dest_pts, dest_shape=None):
     if dest_shape is None:
         dest_shape = src.shape
 
+    if src_pts is None:
+        src_pts = [[y, x] for y in [0, src.shape[0]] for x in [0, src.shape[1]]]
+
+    if dest_pts is None:
+        dest_pts = [[y, x] for y in [0, src.shape[0]] for x in [0, src.shape[1]]]
+
     src_pts = np.float32(order_points(src_pts))
     dest_pts = np.float32(order_points(dest_pts))
 
+    src_pts = np.flip(src_pts, 1)
+    dest_pts = np.flip(dest_pts, 1)
+
     M = cv2.getPerspectiveTransform(src_pts, dest_pts)
-    res = cv2.warpPerspective(src, M, (dest_shape[1], dest_shape[0]))
-
-    return res
-
-
-def crop_and_resize_image(img, points, new_shape=None):
-
-    if new_shape is None:
-        new_shape = img.shape
-
-    tl, tr, br, bl = order_points(points)
-    w = new_shape[1]
-    h = new_shape[0]
-    a1, a2 = tl[:: -1], [0, 0]
-    b1, b2 = tr[:: -1], [0, h]
-    c1, c2 = br[:: -1], [w, h]
-    d1, d2 = bl[:: -1], [w, 0]
-    pts1 = np.float32([a1, b1, c1, d1])
-    pts2 = np.float32([a2, b2, c2, d2])
-
-    res = project(img, pts1, pts2, new_shape)
+    res = cv2.warpPerspective(src, M, dest_shape[::-1])
 
     return res
 
@@ -588,12 +575,12 @@ def isPointInsideRectangle(rect, p):
 def order_points(pts):
     # https://www.pyimagesearch.com/2014/08/25/4-point-opencv-getperspective-transform-example/
     rect = np.zeros((4, 2), dtype="float32")
-    s = pts.sum(axis=1)
-    rect[0] = pts[np.argmin(s)]
-    rect[2] = pts[np.argmax(s)]
+    s = np.sum(pts, axis=1)
     diff = np.diff(pts, axis=1)
-    rect[1] = pts[np.argmin(diff)]
-    rect[3] = pts[np.argmax(diff)]
+    rect[0] = pts[np.argmin(s)]
+    rect[1] = pts[np.argmax(diff)]
+    rect[2] = pts[np.argmax(s)]
+    rect[3] = pts[np.argmin(diff)]
     return rect
 
 
