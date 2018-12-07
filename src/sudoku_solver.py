@@ -84,7 +84,7 @@ def run():
 
                 digits, digit_boxes = fetch_digits(sudoku_bin)
 
-                table_locations, yx_axes, dims = process_box_data(digit_boxes)
+                table_locations, digit_points, dims = process_box_data(digit_boxes)
 
                 predictions, scores = recognize_digits(digits)
 
@@ -96,31 +96,40 @@ def run():
 
                 solved_sudoku_table = solve(given_sudoku_table)
 
-                display = gray_to_rgb(sudoku_bin)
-                for i, dgt in enumerate(digits):
-                    y, x, h, w = digit_boxes[i]
-                    scale = cv2.resize(dgt, (w, h))*255
-                    display[y:y+h, x:x+w, 0] = scale
-                    display[y:y+h, x:x+w, 1] = np.zeros((h, w), int)
-                    display[y:y+h, x:x+w, 2] = np.zeros((h, w), int)
+                sud = draw_sudoku(solved_sudoku_table, digit_set,
+                                  digit_points, dims, sudoku_bin.shape)
 
-                new_numbs = solved_sudoku_table-given_sudoku_table
-                for i in range(9):
-                    for j in range(9):
-                        y, x, h, w = yx_axes[0, i], yx_axes[1, j], dims[0], dims[1]
+                sud2 = draw_sudoku(given_sudoku_table, digit_set,
+                                   digit_points, dims, sudoku_bin.shape)
+                cv2.imshow("ASda", np.hstack([sud2, sud]))
+                cv2.waitKey(0)
+                display = sud
 
-                        n = new_numbs[i][j]
-                        if n == 0:
-                            continue
-                        dgt = digit_set[n-1]
-                        scale = cv2.resize(dgt, (w, h))*255
-                        display[y:y+h, x:x+w, 0] = np.zeros((h, w), int)
-                        display[y:y+h, x:x+w, 1] = scale
-                        display[y:y+h, x:x+w, 2] = np.zeros((h, w), int)
+                # display = gray_to_rgb(sudoku_bin)
+                # for i, dgt in enumerate(digits):
+                #     y, x, h, w = digit_boxes[i]
+                #     scale = cv2.resize(dgt, (w, h))*255
+                #     display[y:y+h, x:x+w, 0] = scale
+                #     display[y:y+h, x:x+w, 1] = np.zeros((h, w), int)
+                #     display[y:y+h, x:x+w, 2] = np.zeros((h, w), int)
+                #
+                # new_numbs = solved_sudoku_table-given_sudoku_table
+                # for i in range(9):
+                #     for j in range(9):
+                #         y, x, h, w = yx_axes[0, i], yx_axes[1, j], dims[0], dims[1]
+                #
+                #         n = new_numbs[i][j]
+                #         if n == 0:
+                #             continue
+                #         dgt = digit_set[n-1]
+                #         scale = cv2.resize(dgt, (w, h))*255
+                #         display[y:y+h, x:x+w, 0] = np.zeros((h, w), int)
+                #         display[y:y+h, x:x+w, 1] = scale
+                #         display[y:y+h, x:x+w, 2] = np.zeros((h, w), int)
 
             # Display the fps
         cv2.putText(display, "fps:{}".format(fps), (20, 20),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0))
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255))
         cv2.imshow('{}, frame shape:'.format(TITLE), display)
 
         c = cv2.waitKey(1) & 0xFF
@@ -461,10 +470,12 @@ def process_box_data(boxes):
     xs = np.around([np.average(boxes[np.where(table_locations[:, 1] == n)[0], 1])
                     for n in range(9)]).astype(np.int)
 
+    yx_points = [[(y, x) for x in xs] for y in ys]
+
     dims = np.array([[h, w] for y, x, h, w in boxes])
     avg_dims = np.around(np.average(dims, axis=0)).astype(np.int)
 
-    return table_locations, np.array([ys, xs]), avg_dims
+    return table_locations, yx_points, avg_dims
 
 
 def crop_digits(img):
@@ -479,13 +490,17 @@ def crop_digits(img):
     return res
 
 
+def load_templates():
+    return [cv2.threshold(cv2.imread("templates/dgt_{}.png".format(i), cv2.IMREAD_GRAYSCALE), 1, 1, cv2.THRESH_BINARY)[1]
+            for i in range(10)]
+
+
 def recognize_digits(digits):
 
     # from direc import Model
     # model = Model()
     # templates =
-    templates = [cv2.threshold(cv2.imread("templates/dgt_{}.png".format(i), cv2.IMREAD_GRAYSCALE), 1, 1, cv2.THRESH_BINARY)[1]
-                 for i in range(10)]
+    templates = load_templates()
 
     def digit_matching(dgt, templates):
 
@@ -526,6 +541,9 @@ def select_digit_set(digits, predictions, scores):
 
     sort_digits = np.array([np.where(predictions == n)[0] for n in range(1, 10)])
 
+    if any([len(arr) == 0 for arr in sort_digits]):
+        return load_templates()[1:]  # dont include zero
+
     max_digit_scores = np.array([inds[np.argmax(scores[inds])] for inds in sort_digits])
 
     digit_set = digits[max_digit_scores]
@@ -541,6 +559,22 @@ def solve(unsolved_sudoku):
     sudoku = Sudoku(s)
     sudoku.solve()
     return string_to_table(sudoku.to_oneliner())
+
+
+def draw_sudoku(sudoku, digits, points, digit_dims, output_shape):
+    output = np.zeros(output_shape)
+
+    h, w = digit_dims
+
+    for r, row in enumerate(sudoku):
+        for c, n in enumerate(row):
+            if n == 0:
+                continue
+            digit = cv2.resize(digits[n-1], (w, h))
+            y, x = points[r][c]
+            output[y:y+h, x:x+w] = digit
+
+    return output
 ############################################
 
 
