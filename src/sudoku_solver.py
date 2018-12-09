@@ -82,7 +82,7 @@ def run():
 
                 sudoku_bin = prerecognition_bin(sudoku)
 
-                digits, digit_boxes = fetch_digits(sudoku_bin)
+                digits, digit_boxes, digit_mask = fetch_digits(sudoku_bin)
 
                 table_locations, digit_points, dims = process_box_data(digit_boxes)
 
@@ -90,40 +90,37 @@ def run():
 
                 digit_set = select_digit_set(digits, predictions, scores)
 
+                sudoku_grid = sudoku_bin-digit_mask
+
                 given_sudoku_table = np.zeros((9, 9), np.int)
                 for i, p in enumerate(table_locations):
                     given_sudoku_table[p[0], p[1]] = predictions[i]
 
                 solved_sudoku_table = solve(given_sudoku_table)
 
-                sud = draw_sudoku(solved_sudoku_table, digit_set,
-                                  digit_points, dims, sudoku_bin.shape)
+                sudoku_solution_table = solved_sudoku_table-given_sudoku_table
 
-                sud = project(sud, None, points, gray.shape)
+                gray_without_sudoku = apply_mask(gray, (1-mask))
 
-                display = sud
+                given_sudoku = draw_sudoku(given_sudoku_table, digit_set,
+                                           digit_points, dims, sudoku_bin.shape)
+                given_sudoku = project(sudoku_grid+given_sudoku, None, points, gray.shape)
 
-                # display = gray_to_rgb(sudoku_bin)
-                # for i, dgt in enumerate(digits):
-                #     y, x, h, w = digit_boxes[i]
-                #     scale = cv2.resize(dgt, (w, h))*255
-                #     display[y:y+h, x:x+w, 0] = scale
-                #     display[y:y+h, x:x+w, 1] = np.zeros((h, w), int)
-                #     display[y:y+h, x:x+w, 2] = np.zeros((h, w), int)
-                #
-                # new_numbs = solved_sudoku_table-given_sudoku_table
-                # for i in range(9):
-                #     for j in range(9):
-                #         y, x, h, w = yx_axes[0, i], yx_axes[1, j], dims[0], dims[1]
-                #
-                #         n = new_numbs[i][j]
-                #         if n == 0:
-                #             continue
-                #         dgt = digit_set[n-1]
-                #         scale = cv2.resize(dgt, (w, h))*255
-                #         display[y:y+h, x:x+w, 0] = np.zeros((h, w), int)
-                #         display[y:y+h, x:x+w, 1] = scale
-                #         display[y:y+h, x:x+w, 2] = np.zeros((h, w), int)
+                given_sudoku = gray_without_sudoku+given_sudoku
+
+                sudoku_solution = draw_sudoku(sudoku_solution_table, digit_set,
+                                              digit_points, dims, sudoku_bin.shape)
+                sudoku_solution = project(sudoku_grid+sudoku_solution, None, points, gray.shape)
+
+                sudoku_solution = gray_without_sudoku+sudoku_solution
+
+                full_sudoku = draw_sudoku(solved_sudoku_table, digit_set,
+                                          digit_points, dims, sudoku_bin.shape)
+                full_sudoku = project(sudoku_grid+full_sudoku, None, points, gray.shape)
+
+                full_sudoku = gray_without_sudoku+full_sudoku
+
+                display = np.stack([full_sudoku, given_sudoku, sudoku_solution], axis=2)
 
             # Display the fps
         cv2.putText(display, "fps:{}".format(fps), (20, 20),
@@ -137,46 +134,6 @@ def run():
         #     count += 1
         #     cap.release()
         #     cv2.destroyAllWindows()
-        #     sudoku_image = crop_and_resize_image(bin_img, points,
-        #                                          new_shape=(9*DIGIT_RESOLUTION[0], 9*DIGIT_RESOLUTION[1]))
-        #
-        #     digits = crop_digits(sudoku_image)
-        #
-        #     unsolved_sudoku = recognize_digits(digits)
-        #
-        #     display_image = gray_to_rgb(sudoku_image, mask=[
-        #         0.2, 0.2, 0.2]) + table_to_image(unsolved_sudoku)
-        #     display_image = extend_image(display_image, (440, 600, 3))
-        #     cv2.putText(display_image, "Press q to rerun detection, or any key to continue with solution",
-        #                 (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255))
-        #     cv2.imshow("Sudoku", display_image)
-        #
-        #     c = cv2.waitKey(0) & 0xFF
-        #     if c == ord('q'):
-        #         cv2.destroyAllWindows()
-        #         cap = init_window(0)
-        #         continue
-        #
-        #     display_image = gray_to_rgb(sudoku_image, mask=[
-        #         0.2, 0.2, 0.2]) + table_to_image(unsolved_sudoku)
-        #     display_image = extend_image(display_image, (440, 600, 3))
-        #     cv2.putText(display_image, "Solving...",
-        #                 (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255))
-        #     cv2.imshow("Sudoku", display_image)
-        #
-        #     solved_sudoku = solve(unsolved_sudoku)
-        #
-        #     solution = solved_sudoku-unsolved_sudoku
-        #
-        #     display_image = gray_to_rgb(sudoku_image, mask=[0.2, 0.2, 0.2]) + \
-        #         table_to_image(solution, color_mask=[0.8, 0, 0])+table_to_image(unsolved_sudoku)
-        #     display_image = extend_image(display_image, (440, 600, 3))
-        #     cv2.putText(display_image, "Press any key to continue...",
-        #                 (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255))
-        #     cv2.imshow("Sudoku", display_image)
-        #     c = cv2.waitKey(0)
-        #     cv2.destroyAllWindows()
-        #     cap = init_window(0)
 
     # When everything done, release the capture
 
@@ -393,9 +350,9 @@ def claw_mask(img_shape, points, claw_size):
     return mask
 
 
-def fetch_digits(aligned__bin_image, digit_shape=(28, 28)):
-    sudoku_bin = extend_image(aligned__bin_image, np.array(aligned__bin_image.shape)+2, 255)
-    # display = sudoku_bin
+def fetch_digits(aligned_bin_image, digit_shape=(28, 28)):
+    sudoku_bin = np.copy(aligned_bin_image)
+    cv2.rectangle(sudoku_bin, (0, 0), (sudoku_bin.shape[0]-1, sudoku_bin.shape[1]-1), (255), 1)
 
     mid_points = (2*DIGIT_RESOLUTION/5+np.array([np.array([x, y]) for x in np.arange(9)
                                                  for y in np.arange(9)])*(DIGIT_RESOLUTION)).astype(np.int)
@@ -439,12 +396,12 @@ def fetch_digits(aligned__bin_image, digit_shape=(28, 28)):
             digits_only[y:y+h, x:x+w], digit_shape), 1, 1, cv2.THRESH_BINARY)[1]
 
         digits.append(digit)
-        boxes.append([y-1, x-1, h, w])
+        boxes.append([y, x, h, w])
 
     digits = np.array(digits)
     boxes = np.array(boxes)
 
-    return digits, boxes
+    return digits, boxes, digits_only
 
 
 def process_box_data(boxes):
@@ -529,7 +486,7 @@ def select_digit_set(digits, predictions, scores):
     sort_digits = np.array([np.where(predictions == n)[0] for n in range(1, 10)])
 
     if any([len(arr) == 0 for arr in sort_digits]):
-        return load_templates()[1:]  # dont include zero
+        return load_templates()[1:]  # doesnt include zero
 
     max_digit_scores = np.array([inds[np.argmax(scores[inds])] for inds in sort_digits])
 
@@ -549,20 +506,35 @@ def solve(unsolved_sudoku):
 
 
 def draw_sudoku(sudoku, digits, points, digit_dims, output_shape):
-    output = np.zeros(output_shape)
+    output = np.zeros(output_shape, dtype=np.uint8)
 
     h, w = digit_dims
+
+    digits_img = [cv2.resize(dgt, (w, h))*255 for dgt in digits]
 
     for r, row in enumerate(sudoku):
         for c, n in enumerate(row):
             if n == 0:
                 continue
-            digit = cv2.resize(digits[n-1], (w, h))
+            digit = digits_img[n-1]
+
             y, x = points[r][c]
             output[y:y+h, x:x+w] = digit
 
     return output
-############################################
+####################################################################################################################################
+
+####################################################################################################################################
+####################################################################################################################################
+
+####################################################################################################################################
+####################################################################################################################################
+####################################################################################################################################
+
+####################################################################################################################################
+####################################################################################################################################
+
+####################################################################################################################################
 
 
 def isPointInsideRectangle(rect, p):
