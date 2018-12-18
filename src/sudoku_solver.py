@@ -2,7 +2,8 @@ import numpy as np
 import cv2
 import time
 import matplotlib.pyplot as plt
-import pytesseract
+
+from debug_tools import *
 
 # RESOLUTION = (240, 320)
 # RESOLUTION = (480, 640)
@@ -32,9 +33,10 @@ def run():
     imgs = [1, 7, 8]
     while(True):
         # Capture frame-by-frame
+        log_message("iter_start: {}".format(1e3*time.perf_counter()))
         ret, frame = cap.read()
-        path = "pics/test{}.jpg".format(imgs[count])
-        frame = cv2.imread(path, cv2.IMREAD_COLOR)
+        # path = "pics/test{}.jpg".format(imgs[count])
+        # frame = cv2.imread(path, cv2.IMREAD_COLOR)
 
         if frame is None:
             print("null frame")
@@ -42,7 +44,6 @@ def run():
         # Our operations on the frame come here
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         # display = gray
-        display = gray_to_rgb(gray)
 
         frames += 1
         elapsed = time.time()-last_t
@@ -54,14 +55,22 @@ def run():
 
         bin = to_binary(gray)
 
+        bin = denoise(bin)
+
+        display = gray_to_rgb(bin)
+
         mask, contour = segment_image(bin, error_th=.5)
 
+        # cv2.drawContours(display, contour, -1, (255, 0, 0), 3)
+
         if mask is not None:
-            cv2.drawContours(display, [contour], -1, (255, 0, 0), 4)
+            # cv2.drawContours(display, [contour], -1, (255, 0, 0), 4)
             cp, dims, rot, = cv2.minAreaRect(contour)
             cv2.circle(display, tuple(np.array(list(cp)).astype(np.int)), 3, (0, 255, 0))
 
             segmented_bin = apply_mask(bin, mask)
+
+            # plot_img(segmented_bin)
 
             display = gray_to_rgb(segmented_bin)
 
@@ -77,50 +86,79 @@ def run():
 
                         cv2.line(display, (x1, y1), (x2, y2), (255, 0, 0), 1)
 
-                sudoku = cv2.resize(project(gray, points, None), (
+                sudoku = cv2.resize(project(segmented_bin, points, None), (
                     9*DIGIT_RESOLUTION[0], 9*DIGIT_RESOLUTION[1]))
 
-                sudoku_bin = prerecognition_bin(sudoku)
+                sudoku_bin = sudoku
+                # plot_img(sudoku_bin)
+                # sudoku_bin = prerecognition_bin(sudoku)
 
-                digits, digit_boxes, digit_mask = fetch_digits(sudoku_bin)
+                digits, digit_boxes, digit_mask, digit_box = fetch_digits(sudoku_bin)
+
+                if len(digit_boxes) == 0:
+                    continue
 
                 table_locations, digit_points, dims = process_box_data(digit_boxes)
 
                 predictions, scores = recognize_digits(digits)
+                # DEBUG
+                # print(predictions)
+                given_sudoku_table = most_possible_sudoku(predictions, scores, table_locations)
+                # DEBUG
+                cv2.imshow("sud", table_to_image(given_sudoku_table))
+                # DEBUG
+                # print(predictions)
+                # t = given_sudoku_table
+                # given_sudoku_table = np.zeros((9, 9), np.int)
+                # for i, p in enumerate(table_locations):
+                #     y, x = p[0], p[1]
+                #     score = scores[i]
+                #     n = predictions[i]
+                #     print("{}->{} in ({},{}) with score {}".format(i, n, y, x, score))
+                #     given_sudoku_table[p[0], p[1]] = predictions[i]
+                #
+                # cv2.imshow("sud2", table_to_image(given_sudoku_table))
+                # print(np.sum(np.abs(given_sudoku_table-t)))
 
-                digit_set = select_digit_set(digits, predictions, scores)
+                # DEBUG
+                # cv2.imshow("bin", sudoku_bin)
+                # cv2.waitKey(0)
 
-                sudoku_grid = sudoku_bin-digit_mask
-
-                given_sudoku_table = np.zeros((9, 9), np.int)
-                for i, p in enumerate(table_locations):
-                    given_sudoku_table[p[0], p[1]] = predictions[i]
-
-                solved_sudoku_table = solve(given_sudoku_table)
-
-                sudoku_solution_table = solved_sudoku_table-given_sudoku_table
-
-                gray_without_sudoku = apply_mask(gray, (1-mask))
-
-                given_sudoku = draw_sudoku(given_sudoku_table, digit_set,
-                                           digit_points, dims, sudoku_bin.shape)
-                given_sudoku = project(sudoku_grid+given_sudoku, None, points, gray.shape)
-
-                given_sudoku = gray_without_sudoku+given_sudoku
-
-                sudoku_solution = draw_sudoku(sudoku_solution_table, digit_set,
-                                              digit_points, dims, sudoku_bin.shape)
-                sudoku_solution = project(sudoku_grid+sudoku_solution, None, points, gray.shape)
-
-                sudoku_solution = gray_without_sudoku+sudoku_solution
-
-                full_sudoku = draw_sudoku(solved_sudoku_table, digit_set,
-                                          digit_points, dims, sudoku_bin.shape)
-                full_sudoku = project(sudoku_grid+full_sudoku, None, points, gray.shape)
-
-                full_sudoku = gray_without_sudoku+full_sudoku
-
-                display = np.stack([full_sudoku, given_sudoku, sudoku_solution], axis=2)
+                # DISABLE
+                # sudoku_grid = sudoku_bin-digit_mask
+                #
+                # digit_set = select_digit_set(digits, predictions, scores)
+                #
+                # solved_sudoku_table = solve(given_sudoku_table)
+                #
+                # sudoku_solution_table = solved_sudoku_table-given_sudoku_table
+                #
+                # display_without_sudoku = apply_mask(segmented_bin, (1-mask))
+                #
+                # given_sudoku = draw_sudoku(given_sudoku_table, digit_set,
+                #                            digit_points, dims, sudoku_bin.shape)
+                # given_sudoku = project(sudoku_grid+given_sudoku, None,
+                #                        points, display_without_sudoku.shape)
+                #
+                # given_sudoku = display_without_sudoku+given_sudoku
+                #
+                # sudoku_solution = draw_sudoku(sudoku_solution_table, digit_set,
+                #                               digit_points, dims, sudoku_bin.shape)
+                # sudoku_solution = project(sudoku_grid+sudoku_solution, None,
+                #                           points, display_without_sudoku.shape)
+                #
+                # sudoku_solution = display_without_sudoku+sudoku_solution
+                #
+                # full_sudoku = draw_sudoku(solved_sudoku_table, digit_set,
+                #                           digit_points, dims, sudoku_bin.shape)
+                # full_sudoku = cv2.bitwise_or(full_sudoku, digit_box)
+                #
+                # full_sudoku = project(sudoku_grid+full_sudoku, None,
+                #                       points, display_without_sudoku.shape)
+                #
+                # full_sudoku = display_without_sudoku+full_sudoku
+                #
+                # display = np.stack([full_sudoku, given_sudoku, sudoku_solution], axis=2)
 
             # Display the fps
         cv2.putText(display, "fps:{}".format(fps), (20, 20),
@@ -141,6 +179,7 @@ def run():
     cv2.destroyAllWindows()
 
 
+@log_time
 def to_binary(gray):
     gray = cv2.UMat(gray)
 
@@ -156,6 +195,24 @@ def to_binary(gray):
     return gray
 
 
+img_buffer = []
+
+
+@log_time
+def denoise(bin, b_size=2):
+    global img_buffer
+    img_buffer.insert(0, bin)
+    if len(img_buffer) > b_size:
+        img_buffer.pop()
+
+    res = img_buffer[0]
+    for i in range(1, len(img_buffer)):
+        res = cv2.bitwise_and(res, img_buffer[i])
+
+    return res
+
+
+@log_time
 def segment_image(bin, error_th=.1):
 
     curr, contours, hierarchy = cv2.findContours(
@@ -193,6 +250,7 @@ def segment_image(bin, error_th=.1):
     return mask, final_contour
 
 
+@log_time
 def detect(segmented_image, contour, display=None):
 
     def cytrav(arr, index, window):
@@ -300,6 +358,7 @@ def detect(segmented_image, contour, display=None):
     return None, ev
 
 
+@log_time
 def project(src, src_pts, dest_pts, dest_shape=None):
     if dest_shape is None:
         dest_shape = src.shape
@@ -322,6 +381,7 @@ def project(src, src_pts, dest_pts, dest_shape=None):
     return res
 
 
+@log_time
 def prerecognition_bin(gray):
     gray = cv2.UMat(gray)
 
@@ -337,6 +397,7 @@ def prerecognition_bin(gray):
     return gray
 
 
+@log_time
 def claw_mask(img_shape, points, claw_size):
 
     claw = np.array(
@@ -350,6 +411,7 @@ def claw_mask(img_shape, points, claw_size):
     return mask
 
 
+@log_time
 def fetch_digits(aligned_bin_image, digit_shape=(28, 28)):
     sudoku_bin = np.copy(aligned_bin_image)
     cv2.rectangle(sudoku_bin, (0, 0), (sudoku_bin.shape[0]-1, sudoku_bin.shape[1]-1), (255), 1)
@@ -357,40 +419,56 @@ def fetch_digits(aligned_bin_image, digit_shape=(28, 28)):
     mid_points = (2*DIGIT_RESOLUTION/5+np.array([np.array([x, y]) for x in np.arange(9)
                                                  for y in np.arange(9)])*(DIGIT_RESOLUTION)).astype(np.int)
 
-    claws = claw_mask(sudoku_bin.shape, mid_points, 8)*255
+    claws = claw_mask(sudoku_bin.shape, mid_points, 9)*255
 
     claws_on_sudoku = cv2.bitwise_or(sudoku_bin, claws)
-    curr, contours, hierarchy = cv2.findContours(
+
+    curr, all_contours, hierarchy = cv2.findContours(
         claws_on_sudoku, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
 
-    contours = [cnt for i, cnt in enumerate(contours) if (hierarchy[0, i, 3] == -1)]
+    outer_contours = [cnt for i, cnt in enumerate(all_contours) if (hierarchy[0, i, 3] == -1)]
 
-    contours = [cnt for cnt in contours if any(
+    grabed_contours = [cnt for cnt in outer_contours if any(
         [(cv2.pointPolygonTest(cnt, tuple(p), False) > -1) for p in mid_points])]
 
-    areas = [np.prod(cv2.boundingRect(cnt)[2:]) for cnt in contours]
+    areas = [np.prod(cv2.boundingRect(cnt)[2:]) for cnt in grabed_contours]
 
-    contours = [cnt for i, cnt in enumerate(
-        contours) if areas[i] > 200 and areas[i] < 500]
+    certain_size_contours = [cnt for i, cnt in enumerate(
+        grabed_contours) if areas[i] > 150 and areas[i] < 400]
 
     mask = np.zeros(sudoku_bin.shape, np.uint8)
-    # [cv2.rectangle(mask, (x, y), (x+w, y+h), (255), 1)
-    #     for x, y, w, h in [cv2.boundingRect(cnt) for cnt in contours]]
-    cv2.drawContours(mask, contours, -1, (255), -1)
+    cv2.drawContours(mask, certain_size_contours, -1, (255), -1)
+
+    box_mask = np.zeros(sudoku_bin.shape, np.uint8)
+    [cv2.rectangle(box_mask, (x, y), (x+w, y+h), (255), -1)
+        for x, y, w, h in [cv2.boundingRect(cnt) for cnt in certain_size_contours]]
 
     digits_only = cv2.bitwise_and(sudoku_bin, mask)
+
     curr, contours, hierarchy = cv2.findContours(
         digits_only, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    #
-    # curr, contours, hierarchy = cv2.findContours(
-    #     digits, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-    #
-    # [cv2.rectangle(digits, (x, y), (x+w, y+h), (255))
-    #     for x, y, w, h in [cv2.boundingRect(cnt) for cnt in contours]]
+    final_areas = [np.prod(cv2.boundingRect(cnt)[2:]) for cnt in contours]
+
+    final_contours = [cnt for i, cnt in enumerate(
+        contours) if final_areas[i] > 100 and final_areas[i] < 400]
+
     digits = []
     boxes = []
-    for cnt in contours:
+
+    # DEBUG
+    # cv2.imshow("bin", sudoku_bin)
+    #
+    # temp_img = gray_to_rgb(np.copy(claws_on_sudoku))
+    # cv2.drawContours(temp_img, certain_size_contours, -1, (0, 255, 0))
+    # cv2.imshow("certain size", temp_img)
+    #
+    # temp_img = gray_to_rgb(np.copy(claws_on_sudoku))
+    # cv2.drawContours(temp_img, final_contours, -1, (0, 255, 0))
+    # cv2.imshow("final", temp_img)
+    # cv2.waitKey(0)
+
+    for cnt in final_contours:
         x, y, w, h = cv2.boundingRect(cnt)
         digit = cv2.threshold(cv2.resize(
             digits_only[y:y+h, x:x+w], digit_shape), 1, 1, cv2.THRESH_BINARY)[1]
@@ -401,9 +479,10 @@ def fetch_digits(aligned_bin_image, digit_shape=(28, 28)):
     digits = np.array(digits)
     boxes = np.array(boxes)
 
-    return digits, boxes, digits_only
+    return digits, boxes, digits_only, box_mask
 
 
+@log_time
 def process_box_data(boxes):
     mid_locations = np.array([[int(y+h/2), (x+w/2)] for y, x, h, w in boxes])
     table_locations = np.array(mid_locations/DIGIT_RESOLUTION).astype(np.int)
@@ -422,6 +501,7 @@ def process_box_data(boxes):
     return table_locations, yx_points, avg_dims
 
 
+@log_time
 def crop_digits(img):
     from itertools import product
 
@@ -434,11 +514,13 @@ def crop_digits(img):
     return res
 
 
+@log_time
 def load_templates():
     return [cv2.threshold(cv2.imread("templates/dgt_{}.png".format(i), cv2.IMREAD_GRAYSCALE), 1, 1, cv2.THRESH_BINARY)[1]
             for i in range(10)]
 
 
+@log_time
 def recognize_digits(digits):
 
     # from direc import Model
@@ -481,6 +563,7 @@ def recognize_digits(digits):
     # return np.random.randint(10, size=(9, 9))
 
 
+@log_time
 def select_digit_set(digits, predictions, scores):
 
     sort_digits = np.array([np.where(predictions == n)[0] for n in range(1, 10)])
@@ -495,16 +578,55 @@ def select_digit_set(digits, predictions, scores):
     return digit_set
 
 
+score_historic = np.zeros((9, 9, 10))
+
+
+@log_time
+def most_possible_sudoku(predictions, scores, locs):
+    if predictions.shape[0] != scores.shape[0] or scores.shape[0] != locs.shape[0]:
+        print("shape error")
+        return
+
+    global score_historic
+
+    for i in range(len(predictions)):
+        y, x = locs[i]
+        score = scores[i]
+        n = predictions[i]
+        print("{}-->{} in ({},{}) with score {}".format(i, n, y, x, score))
+        score_historic[y][x][n] = max(score, score_historic[y][x][n])
+
+    res = np.argmax(score_historic, axis=2).astype(np.int)
+
+    return res
+
+
+@log_time
 def solve(unsolved_sudoku):
     # https://github.com/hbldh/dlxsudoku
     from dlxsudoku import Sudoku
+    from dlxsudoku.exceptions import SudokuHasMultipleSolutionsError, SudokuHasNoSolutionError, SudokuTooDifficultError
 
     s = table_to_string(unsolved_sudoku)
-    sudoku = Sudoku(s)
-    sudoku.solve()
-    return string_to_table(sudoku.to_oneliner())
+    try:
+        sudoku = Sudoku(s)
+        sudoku.solve()
+    except SudokuHasNoSolutionError as e:
+        print(e)
+        return unsolved_sudoku
+        pass
+    except SudokuHasMultipleSolutionsError as e:
+        print(e)
+        return unsolved_sudoku
+        pass
+    except SudokuTooDifficultError as e:
+        print(e)
+        return unsolved_sudoku
+    else:
+        return string_to_table(sudoku.to_oneliner())
 
 
+@log_time
 def draw_sudoku(sudoku, digits, points, digit_dims, output_shape):
     output = np.zeros(output_shape, dtype=np.uint8)
 
@@ -586,16 +708,16 @@ def string_to_table(s):
 
 
 def table_to_image(table, color_mask=[0, 0, 0.8]):
-    temp = np.zeros((9, 9, DIGIT_RESOLUTION[0], DIGIT_RESOLUTION[1]))
+    temp = np.zeros((9, 9, DIGIT_RESOLUTION[0], DIGIT_RESOLUTION[1], 3))
     for i, row in enumerate(table):
         for j, n in enumerate(row):
             if n == 0:
                 continue
             cv2.putText(temp[j][i], "{}".format(n),
-                        (int(DIGIT_RESOLUTION[0]*0.4), int(DIGIT_RESOLUTION[0]*0.4)),
+                        (int(DIGIT_RESOLUTION[0]*0.25), int(DIGIT_RESOLUTION[0]*0.75)),
                         cv2.FONT_HERSHEY_SIMPLEX,
-                        0.5,
-                        (255, 0, 0))
+                        0.8,
+                        (255, 255, 0))
     res = None
     for row in temp:
         t_res = np.vstack(row)
@@ -603,8 +725,21 @@ def table_to_image(table, color_mask=[0, 0, 0.8]):
             res = t_res
         else:
             res = np.hstack([res, t_res])
+    # res = gray_to_rgb(res, mask=color_mask)
+    h, w = res.shape[:2]
+    for i in range(1, 9):
+        y = i*DIGIT_RESOLUTION[0]
+        x1, y1, x2, y2 = 0, y, w-1, y
+        cv2.line(res, (x1, y1), (x2, y2), (0, 255, 0))
 
-    return gray_to_rgb(res, mask=color_mask)
+    for j in range(1, 9):
+        x = j*DIGIT_RESOLUTION[1]
+        x1, y1, x2, y2 = x, 0, x, h-1
+        cv2.line(res, (x1, y1), (x2, y2), (0, 255, 0))
+
+    cv2.rectangle(res, (0, 0), (w-1, h-1), (0, 255, 255))
+
+    return res
 
 
 def rho_theta_to_coords(line, image_shape=None):

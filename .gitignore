@@ -1,4 +1,12 @@
+__pycache__/
 pics/
 .ipynb_checkpoints/
 *.txt
 *.pyc
+
+
+*.ipynb
+src/model_weights.h5
+src/direc.py
+
+debug*
