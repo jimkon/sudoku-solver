@@ -105,7 +105,14 @@ def run():
                 # print(predictions)
                 given_sudoku_table = most_possible_sudoku(predictions, scores, table_locations)
                 # DEBUG
-                cv2.imshow("sud", table_to_image(given_sudoku_table))
+                temp_img = table_to_image(given_sudoku_table)
+                for row in digit_points:
+                    for p in row:
+                        y, x = p
+                        h, w = dims
+                        cv2.rectangle(temp_img, (x, y), (x+w, y+h), (255, 0, 0))
+                cv2.imshow("sud", temp_img)
+                # cv2.waitKey(0)
                 # DEBUG
                 # print(predictions)
                 # t = given_sudoku_table
@@ -125,40 +132,40 @@ def run():
                 # cv2.waitKey(0)
 
                 # DISABLE
-                # sudoku_grid = sudoku_bin-digit_mask
-                #
-                # digit_set = select_digit_set(digits, predictions, scores)
-                #
-                # solved_sudoku_table = solve(given_sudoku_table)
-                #
-                # sudoku_solution_table = solved_sudoku_table-given_sudoku_table
-                #
-                # display_without_sudoku = apply_mask(segmented_bin, (1-mask))
-                #
-                # given_sudoku = draw_sudoku(given_sudoku_table, digit_set,
-                #                            digit_points, dims, sudoku_bin.shape)
-                # given_sudoku = project(sudoku_grid+given_sudoku, None,
-                #                        points, display_without_sudoku.shape)
-                #
-                # given_sudoku = display_without_sudoku+given_sudoku
-                #
-                # sudoku_solution = draw_sudoku(sudoku_solution_table, digit_set,
-                #                               digit_points, dims, sudoku_bin.shape)
-                # sudoku_solution = project(sudoku_grid+sudoku_solution, None,
-                #                           points, display_without_sudoku.shape)
-                #
-                # sudoku_solution = display_without_sudoku+sudoku_solution
-                #
-                # full_sudoku = draw_sudoku(solved_sudoku_table, digit_set,
-                #                           digit_points, dims, sudoku_bin.shape)
-                # full_sudoku = cv2.bitwise_or(full_sudoku, digit_box)
-                #
-                # full_sudoku = project(sudoku_grid+full_sudoku, None,
-                #                       points, display_without_sudoku.shape)
-                #
-                # full_sudoku = display_without_sudoku+full_sudoku
-                #
-                # display = np.stack([full_sudoku, given_sudoku, sudoku_solution], axis=2)
+                sudoku_grid = sudoku_bin-digit_mask
+
+                digit_set = select_digit_set(digits, predictions, scores)
+
+                solved_sudoku_table = solve(given_sudoku_table)
+
+                sudoku_solution_table = solved_sudoku_table-given_sudoku_table
+
+                display_without_sudoku = apply_mask(segmented_bin, (1-mask))
+
+                given_sudoku = draw_sudoku(given_sudoku_table, digit_set,
+                                           digit_points, dims, sudoku_bin.shape)
+                given_sudoku = project(sudoku_grid+given_sudoku, None,
+                                       points, display_without_sudoku.shape)
+
+                given_sudoku = display_without_sudoku+given_sudoku
+
+                sudoku_solution = draw_sudoku(sudoku_solution_table, digit_set,
+                                              digit_points, dims, sudoku_bin.shape)
+                sudoku_solution = project(sudoku_grid+sudoku_solution, None,
+                                          points, display_without_sudoku.shape)
+
+                sudoku_solution = display_without_sudoku+sudoku_solution
+
+                full_sudoku = draw_sudoku(solved_sudoku_table, digit_set,
+                                          digit_points, dims, sudoku_bin.shape)
+                full_sudoku = cv2.bitwise_or(full_sudoku, digit_box)
+
+                full_sudoku = project(sudoku_grid+full_sudoku, None,
+                                      points, display_without_sudoku.shape)
+
+                full_sudoku = display_without_sudoku+full_sudoku
+
+                display = np.stack([full_sudoku, given_sudoku, sudoku_solution], axis=2)
 
             # Display the fps
         cv2.putText(display, "fps:{}".format(fps), (20, 20),
@@ -325,8 +332,8 @@ def detect(segmented_image, contour, display=None):
 
         ev = np.sum(np.multiply(th_range_factor, count_factor))*verticality_factor
 
-    cv2.putText(display, "{}%".format(ev*100),
-                (10, display.shape[0]-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, int(ev*255), int((1-ev)*255)))
+    # cv2.putText(display, "{}%".format(ev*100),
+    #             (10, display.shape[0]-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, int(ev*255), int((1-ev)*255)))
     # cv2.drawContours(display, [contour], -1, (0, int(ev*255), int((1-ev)*255)), 2)
 
     value_threshold = .75
@@ -484,19 +491,51 @@ def fetch_digits(aligned_bin_image, digit_shape=(28, 28)):
 
 @log_time
 def process_box_data(boxes):
+    def calculate(i, x, y):
+        if i in x:
+            return y[x.index(i)]
+        l = np.searchsorted(x, i)-1
+        r = l+1
+        x1, y1 = (x[l], y[l]) if l >= 0 else (x[0]-1, y[0])
+        x2, y2 = (x[r], y[r]) if r < len(x) else (x[len(x)-1]+1, y[len(x)-1])
+        yi = (y2-y1)/(x2-x1)*(i-x1)+y1
+
+        return yi
+
     mid_locations = np.array([[int(y+h/2), (x+w/2)] for y, x, h, w in boxes])
     table_locations = np.array(mid_locations/DIGIT_RESOLUTION).astype(np.int)
 
-    ys = np.around([np.average(boxes[np.where(table_locations[:, 0] == n)[0], 0])
-                    for n in range(9)]).astype(np.int)
+    # ys = np.around([np.average(boxes[np.where(table_locations[:, 0] == n)[0], 0])
+    #                 for n in range(9)]).astype(np.int)
+    # print(ys)
 
-    xs = np.around([np.average(boxes[np.where(table_locations[:, 1] == n)[0], 1])
-                    for n in range(9)]).astype(np.int)
+    sorted_ys = [boxes[np.where(table_locations[:, 0] == n)[0], 0] for n in range(9)]
+    # print(sorted_ys)
+    avg_ys, inds = np.transpose(np.around([(np.average(y), i)
+                                           for i, y in enumerate(sorted_ys) if len(y) > 0]).astype(np.int))
+    # print(avg_ys, inds)
+    ys = np.array([calculate(yi, list(inds), list(avg_ys)) for yi in range(9)], np.int)
+    # print(ys)
+    # print("Asddddddasd")
+    # xs=np.around([np.average(boxes[np.where(table_locations[:, 1] == n)[0], 1])
+    #                 for n in range(9)]).astype(np.int)
+
+    sorted_xs = [boxes[np.where(table_locations[:, 0] == n)[0], 0] for n in range(9)]
+    # print(sorted_xs)
+    avg_xs, inds = np.transpose(np.around([(np.average(x), i)
+                                           for i, x in enumerate(sorted_xs) if len(x) > 0]).astype(np.int))
+    # print(avg_xs, inds)
+    xs = np.array([calculate(xi, list(inds), list(avg_xs)) for xi in range(9)], np.int)
+    # print(xs)
+    # print("Asddddddasd")
 
     yx_points = [[(y, x) for x in xs] for y in ys]
 
     dims = np.array([[h, w] for y, x, h, w in boxes])
     avg_dims = np.around(np.average(dims, axis=0)).astype(np.int)
+
+    # print(xs)
+    # print(yx_points)
 
     return table_locations, yx_points, avg_dims
 
@@ -593,7 +632,7 @@ def most_possible_sudoku(predictions, scores, locs):
         y, x = locs[i]
         score = scores[i]
         n = predictions[i]
-        print("{}-->{} in ({},{}) with score {}".format(i, n, y, x, score))
+        # print("{}-->{} in ({},{}) with score {}".format(i, n, y, x, score))
         score_historic[y][x][n] = max(score, score_historic[y][x][n])
 
     res = np.argmax(score_historic, axis=2).astype(np.int)
@@ -641,7 +680,7 @@ def draw_sudoku(sudoku, digits, points, digit_dims, output_shape):
             digit = digits_img[n-1]
 
             y, x = points[r][c]
-            output[y:y+h, x:x+w] = digit
+            output[y: y+h, x: x+w] = digit
 
     return output
 ####################################################################################################################################
@@ -726,7 +765,7 @@ def table_to_image(table, color_mask=[0, 0, 0.8]):
         else:
             res = np.hstack([res, t_res])
     # res = gray_to_rgb(res, mask=color_mask)
-    h, w = res.shape[:2]
+    h, w = res.shape[: 2]
     for i in range(1, 9):
         y = i*DIGIT_RESOLUTION[0]
         x1, y1, x2, y2 = 0, y, w-1, y
