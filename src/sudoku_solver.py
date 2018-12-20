@@ -136,36 +136,36 @@ def run():
 
                 digit_set = select_digit_set(digits, predictions, scores)
 
-                solved_sudoku_table = solve(given_sudoku_table)
-
-                sudoku_solution_table = solved_sudoku_table-given_sudoku_table
-
-                display_without_sudoku = apply_mask(segmented_bin, (1-mask))
-
-                given_sudoku = draw_sudoku(given_sudoku_table, digit_set,
-                                           digit_points, dims, sudoku_bin.shape)
-                given_sudoku = project(sudoku_grid+given_sudoku, None,
-                                       points, display_without_sudoku.shape)
-
-                given_sudoku = display_without_sudoku+given_sudoku
-
-                sudoku_solution = draw_sudoku(sudoku_solution_table, digit_set,
-                                              digit_points, dims, sudoku_bin.shape)
-                sudoku_solution = project(sudoku_grid+sudoku_solution, None,
-                                          points, display_without_sudoku.shape)
-
-                sudoku_solution = display_without_sudoku+sudoku_solution
-
-                full_sudoku = draw_sudoku(solved_sudoku_table, digit_set,
-                                          digit_points, dims, sudoku_bin.shape)
-                full_sudoku = cv2.bitwise_or(full_sudoku, digit_box)
-
-                full_sudoku = project(sudoku_grid+full_sudoku, None,
-                                      points, display_without_sudoku.shape)
-
-                full_sudoku = display_without_sudoku+full_sudoku
-
-                display = np.stack([full_sudoku, given_sudoku, sudoku_solution], axis=2)
+                # solved_sudoku_table = solve(given_sudoku_table)
+                #
+                # sudoku_solution_table = solved_sudoku_table-given_sudoku_table
+                #
+                # display_without_sudoku = apply_mask(segmented_bin, (1-mask))
+                #
+                # given_sudoku = draw_sudoku(given_sudoku_table, digit_set,
+                #                            digit_points, dims, sudoku_bin.shape)
+                # given_sudoku = project(sudoku_grid+given_sudoku, None,
+                #                        points, display_without_sudoku.shape)
+                #
+                # given_sudoku = display_without_sudoku+given_sudoku
+                #
+                # sudoku_solution = draw_sudoku(sudoku_solution_table, digit_set,
+                #                               digit_points, dims, sudoku_bin.shape)
+                # sudoku_solution = project(sudoku_grid+sudoku_solution, None,
+                #                           points, display_without_sudoku.shape)
+                #
+                # sudoku_solution = display_without_sudoku+sudoku_solution
+                #
+                # full_sudoku = draw_sudoku(solved_sudoku_table, digit_set,
+                #                           digit_points, dims, sudoku_bin.shape)
+                # full_sudoku = cv2.bitwise_or(full_sudoku, digit_box)
+                #
+                # full_sudoku = project(sudoku_grid+full_sudoku, None,
+                #                       points, display_without_sudoku.shape)
+                #
+                # full_sudoku = display_without_sudoku+full_sudoku
+                #
+                # display = np.stack([full_sudoku, given_sudoku, sudoku_solution], axis=2)
 
             # Display the fps
         cv2.putText(display, "fps:{}".format(fps), (20, 20),
@@ -312,7 +312,7 @@ def detect(segmented_image, contour, display=None):
                                     np.max(ths),
                                     np.average(ths),
                                     len(ths)]
-                                   for ths in [[line[1] for line in l] for l in ls] if len(ths) >= 0])
+                                   for ths in [[line[1] for line in l] for l in ls] if len(ths) > 0])
 
         # print(line_stats)
         min_th, max_th, avg_th, count = line_stats
@@ -463,18 +463,6 @@ def fetch_digits(aligned_bin_image, digit_shape=(28, 28)):
     digits = []
     boxes = []
 
-    # DEBUG
-    # cv2.imshow("bin", sudoku_bin)
-    #
-    # temp_img = gray_to_rgb(np.copy(claws_on_sudoku))
-    # cv2.drawContours(temp_img, certain_size_contours, -1, (0, 255, 0))
-    # cv2.imshow("certain size", temp_img)
-    #
-    # temp_img = gray_to_rgb(np.copy(claws_on_sudoku))
-    # cv2.drawContours(temp_img, final_contours, -1, (0, 255, 0))
-    # cv2.imshow("final", temp_img)
-    # cv2.waitKey(0)
-
     for cnt in final_contours:
         x, y, w, h = cv2.boundingRect(cnt)
         digit = cv2.threshold(cv2.resize(
@@ -505,37 +493,22 @@ def process_box_data(boxes):
     mid_locations = np.array([[int(y+h/2), (x+w/2)] for y, x, h, w in boxes])
     table_locations = np.array(mid_locations/DIGIT_RESOLUTION).astype(np.int)
 
-    # ys = np.around([np.average(boxes[np.where(table_locations[:, 0] == n)[0], 0])
-    #                 for n in range(9)]).astype(np.int)
-    # print(ys)
-
     sorted_ys = [boxes[np.where(table_locations[:, 0] == n)[0], 0] for n in range(9)]
-    # print(sorted_ys)
+
     avg_ys, inds = np.transpose(np.around([(np.average(y), i)
                                            for i, y in enumerate(sorted_ys) if len(y) > 0]).astype(np.int))
-    # print(avg_ys, inds)
     ys = np.array([calculate(yi, list(inds), list(avg_ys)) for yi in range(9)], np.int)
-    # print(ys)
-    # print("Asddddddasd")
-    # xs=np.around([np.average(boxes[np.where(table_locations[:, 1] == n)[0], 1])
-    #                 for n in range(9)]).astype(np.int)
 
     sorted_xs = [boxes[np.where(table_locations[:, 0] == n)[0], 0] for n in range(9)]
-    # print(sorted_xs)
     avg_xs, inds = np.transpose(np.around([(np.average(x), i)
                                            for i, x in enumerate(sorted_xs) if len(x) > 0]).astype(np.int))
-    # print(avg_xs, inds)
     xs = np.array([calculate(xi, list(inds), list(avg_xs)) for xi in range(9)], np.int)
-    # print(xs)
-    # print("Asddddddasd")
 
     yx_points = [[(y, x) for x in xs] for y in ys]
 
     dims = np.array([[h, w] for y, x, h, w in boxes])
-    avg_dims = np.around(np.average(dims, axis=0)).astype(np.int)
 
-    # print(xs)
-    # print(yx_points)
+    avg_dims = np.around(np.average(dims, axis=0)).astype(np.int)
 
     return table_locations, yx_points, avg_dims
 
@@ -571,20 +544,9 @@ def recognize_digits(digits):
 
         scores = [1-np.sum(cv2.bitwise_xor(tmp, dgt)) / np.prod(tmp.shape)
                   for tmp in templates]
-        # print(scores)
         res = np.argmax(scores)
-        score = scores[res]
-        # for r in dgt:
-        #     print(r)
-        # for r in templates[np.argmax(rates)]:
-        #     print(r)
-        # cv2.imshow("asda", np.hstack(
-        #     [dgt, templates[res], np.abs(templates[res]-dgt)]))
-        # cv2.imshow("asda", np.hstack([dgt*255, np.hstack(
-        #     [cv2.bitwise_xor(tmp, dgt)*255 for tmp in templates]), templates[res]*255]))
-        # print(res, score)
-        # cv2.waitKey(0)
-        return [res, score]
+        # score = scores[res]
+        return [res, scores]
 
     pred = []
     scores = []
@@ -598,19 +560,18 @@ def recognize_digits(digits):
     scores = np.array(scores)
 
     return pred, scores
-    # return string_to_table("030467050920010006067300148301006027400850600090200400005624001203000504040030702")
-    # return np.random.randint(10, size=(9, 9))
 
 
 @log_time
 def select_digit_set(digits, predictions, scores):
+    best_scores = np.max(scores, axis=1)
+    sorted_digits_index = np.array([np.where(predictions == n)[0] for n in range(1, 10)])
 
-    sort_digits = np.array([np.where(predictions == n)[0] for n in range(1, 10)])
+    if any([len(arr) == 0 for arr in sorted_digits_index]):
+        return load_templates()[1:]
 
-    if any([len(arr) == 0 for arr in sort_digits]):
-        return load_templates()[1:]  # doesnt include zero
-
-    max_digit_scores = np.array([inds[np.argmax(scores[inds])] for inds in sort_digits])
+    max_digit_scores = np.array([inds[np.argmax(best_scores[inds])]
+                                 for inds in sorted_digits_index])
 
     digit_set = digits[max_digit_scores]
 
@@ -618,6 +579,9 @@ def select_digit_set(digits, predictions, scores):
 
 
 score_historic = np.zeros((9, 9, 10))
+m = np.zeros((10))
+m[0] = .1
+d_h = np.multiply(np.ones((9, 9, 10)), m)
 
 
 @log_time
@@ -627,13 +591,23 @@ def most_possible_sudoku(predictions, scores, locs):
         return
 
     global score_historic
+    global d_h
+
+    dh = np.copy(d_h)
 
     for i in range(len(predictions)):
         y, x = locs[i]
         score = scores[i]
         n = predictions[i]
         # print("{}-->{} in ({},{}) with score {}".format(i, n, y, x, score))
-        score_historic[y][x][n] = max(score, score_historic[y][x][n])
+        # score_historic[y][x][n] = max(score, score_historic[y][x][n])
+        # if x == 2 and y == 3:
+        dh[y][x] = score
+        # if x == 2 and y == 3:
+        # print(score_historic[y][x])
+        # print(np.argmax(score_historic[y][x]))
+        # print(dh)
+    score_historic += dh
 
     res = np.argmax(score_historic, axis=2).astype(np.int)
 
