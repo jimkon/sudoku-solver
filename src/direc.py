@@ -9,6 +9,7 @@ from keras.layers import Dense
 from keras.models import Sequential
 from keras.datasets import mnist
 import numpy as np
+import cv2
 import os
 import tensorflow as tf
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -68,7 +69,6 @@ class Model:
         self.model.save("model_weights.h5")
 
     def predict(self, digit_img):
-        import cv2
         # print(digit_img.shape)
         x = digit_img
         x = np.reshape(x, (1, 1, 28, 28)).astype('float32')
