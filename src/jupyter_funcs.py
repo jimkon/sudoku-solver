@@ -2,6 +2,28 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
+import cProfile, pstats, io
+import solver
+
+
+def profile(fnc):
+
+    """A decorator that uses cProfile to profile a function"""
+
+    def inner(*args, **kwargs):
+
+        pr = cProfile.Profile()
+        pr.enable()
+        retval = fnc(*args, **kwargs)
+        pr.disable()
+        s = io.StringIO()
+        sortby = 'cumulative'
+        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+        ps.print_stats()
+        print(s.getvalue())
+        return retval
+
+    return inner
 
 def group_clustered_items(labels, items):
     items = np.array(items)
@@ -75,3 +97,78 @@ def grab_digits(img):
     grabed_items = np.array([img[y:y+h, x:x+w] for x, y, w, h in boxes])
 
     return grabed_items, desired_size_contours, boxes
+
+def normalize_digits(dgts, res_shape=(40, 40)):
+    nomalized = [np.array(np.divide(dgt, 255), dtype=np.uint8) for dgt in dgts]
+    resized = [cv2.resize(dgt, res_shape) for dgt in nomalized]
+    return resized
+
+def constuct_sudoku_table(nums, locs):
+    sud = np.zeros((9, 9), np.int)
+    for num, loc in zip(nums, locs):
+        j, i = loc
+        sud[i, j] = num+1
+
+    return sud
+
+def cluster_sudoku_digits(dgts, boxes, img_shape):
+    clf = KMeans(n_clusters=9)
+    n_dgts = normalize_digits(dgts)
+    clf.fit([d.flatten() for d in n_dgts])
+
+    groups = group_clustered_items(clf.labels_, dgts)
+
+    g_sizes = [len(g) for g in groups]
+
+    d_shape = np.array(img_shape)/9
+    locs = np.array([np.array([x, y]) for x, y, w, h in boxes])
+    locs = (locs/d_shape).astype(np.int)
+
+    sud = constuct_sudoku_table(clf.labels_, locs)
+
+    return sud, groups
+
+def create_sudoku_image(sud, digit_groups, shape=(400, 400)):
+    def draw_digit(img, loc, digit):
+        x, y = np.array(loc)*40+20
+        h, w = digit.shape
+        img[y:y+h, x:x+w] = digit
+
+    result = np.zeros(shape, np.uint8)
+    for i, row in enumerate(sud):
+        for j, n in enumerate(row):
+            if n==0:
+                continue
+
+            dgt = digit_groups[n-1][np.random.randint(0, len(digit_groups[n-1]))]
+            draw_digit(result, (j, i), dgt)
+
+    return result
+
+def solve_sudoku(sudoku):
+    #https://towardsdatascience.com/peter-norvigs-sudoku-solver-25779bb349ce
+    import solver
+    sudoku_str = table_to_string(sudoku)
+    res = solver.solve(sudoku_str)
+    if res==False:
+        return sudoku
+    res = solver.sudoku_to_string(res)
+    sud_table = string_to_table(res)
+
+    return sud_table
+
+def table_to_string(unsolved_sudoku):
+    res = "".join(str(n) for n in np.array(unsolved_sudoku).flatten())
+    return res
+
+
+def string_to_table(s):
+    res = np.array(list(np.array(list(int(d) for d in s[i: i+9])) for i in np.arange(9)*9))
+    return res
+
+def extract_sudoku(img):
+    dgts, cnts, locs = grab_digits(img)
+    sudoku, groups = cluster_sudoku_digits(dgts, locs, img.shape)
+    solved = solve_sudoku(sudoku)
+    res = create_sudoku_image(solved, groups)
+    return res

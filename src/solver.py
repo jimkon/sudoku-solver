@@ -1,3 +1,5 @@
+#https://towardsdatascience.com/peter-norvigs-sudoku-solver-25779bb349ce
+
 def cross(A, B):
     "Cross product of elements in A and elements in B."
     return [a+b for a in A for b in B]
